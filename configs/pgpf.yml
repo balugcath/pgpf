@@ -1,0 +1,14 @@
+listen: :5432
+shard_listen: :5433
+failover_timeout: 2
+pg_user: postgres
+pg_passwd: "123"
+prometheus_listen_port: :9091
+servers:
+  one:
+    address: 192.168.1.25:5432
+    use: true
+  two:
+    address: 192.168.1.26:5432
+    command: ssh -i id_rsa -o StrictHostKeyChecking=no root@192.168.1.26 touch /var/lib/postgresql/12/data/failover_triggerr
+    use: true
