@@ -42,6 +42,7 @@ func Test_echoServer(t *testing.T) {
 			b := make([]byte, 65535)
 
 			go func() {
+				time.Sleep(time.Second)
 				conn, err = net.Dial("tcp", tt.args.address)
 				if err != nil {
 					t.Fatal(err)
