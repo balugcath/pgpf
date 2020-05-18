@@ -81,17 +81,25 @@ func TestPG_HostVersion(t *testing.T) {
 		want    float64
 		wantErr bool
 		err     error
+		arg     string
 	}{
 		{
 			name:    "test 1",
 			wantErr: false,
 			want:    11,
+			arg:     "11",
 		},
 		{
 			name:    "test 2",
 			wantErr: true,
 			want:    0,
 			err:     errors.New("err"),
+		},
+		{
+			name:    "test 3",
+			wantErr: false,
+			want:    11,
+			arg:     "11 12",
 		},
 	}
 	for _, tt := range tests {
@@ -101,7 +109,7 @@ func TestPG_HostVersion(t *testing.T) {
 				t.Fatalf("an error '%s' was not expected when opening a stub database connection", err)
 			}
 			defer db.Close()
-			mock.ExpectQuery("show server_version").WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(11)).WillReturnError(tt.err)
+			mock.ExpectQuery("show server_version").WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(tt.arg)).WillReturnError(tt.err)
 
 			s := &PG{db: db}
 

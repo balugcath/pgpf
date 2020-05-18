@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"strconv"
+	"strings"
 	"time"
 
 	//
@@ -48,7 +49,7 @@ func (s *PG) HostVersion() (float64, error) {
 	if err := s.db.QueryRowContext(ctx, "show server_version").Scan(&ver); err != nil {
 		return 0, err
 	}
-	return strconv.ParseFloat(ver, 32)
+	return strconv.ParseFloat(strings.Split(ver, " ")[0], 32)
 }
 
 // IsRecovery ...
