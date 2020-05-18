@@ -76,7 +76,7 @@ func (s *Proxy) Serve(doneCtx context.Context, hostname string) error {
 			var wgCopy sync.WaitGroup
 			defer wgCopy.Wait()
 
-			server, err := net.DialTimeout("tcp", addressServer, time.Duration(s.Config.TimeoutMasterDial))
+			server, err := net.DialTimeout("tcp", addressServer, time.Second*time.Duration(s.Config.TimeoutMasterDial))
 			if err != nil {
 				log.Println(err)
 				client.Close()

@@ -62,6 +62,7 @@ func Test_echoServer(t *testing.T) {
 			n, err := conn.(io.ReadWriter).Read(b)
 			conn.Close()
 			cancel()
+			time.Sleep(time.Second)
 
 			if !reflect.DeepEqual(b[:n], tt.buf) {
 				t.Errorf("echoServer() = %v, want %v", b[:n], tt.buf)
