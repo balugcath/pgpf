@@ -20,7 +20,7 @@ type opts struct {
 
 func main() {
 	options := opts{}
-	flag.StringVar(&options.configFile, "f", "pgpf.yml", "config file")
+	flag.StringVar(&options.configFile, "f", "", "config file")
 	flag.StringVar(&options.etcdAddress, "e", "http://192.168.1.16:2379", "etcd address")
 	flag.StringVar(&options.etcdKey, "k", "pgpf", "etcd key")
 	flag.Parse()
