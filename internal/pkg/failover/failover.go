@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"strings"
 	"sync"
+	"text/template"
 	"time"
 
 	"github.com/balugcath/pgpf/internal/pkg/config"
@@ -46,6 +47,9 @@ func NewFailover(cfg *config.Config) *Failover {
 func (s *Failover) Start(doneCtx context.Context) {
 	mtrc := metric.NewMetric(s.Config)
 	go func() {
+		if s.Config.PrometheusListenPort == "" {
+			return
+		}
 		log.Fatalln(mtrc.Start())
 	}()
 
@@ -158,7 +162,7 @@ func (s *Failover) makeMaster() (string, error) {
 		if ver >= s.Config.MinVerSQLPromote {
 			err = s.Transporter.Promote(v.PgConn)
 		} else {
-			err = wakeupSlave(v.Command)
+			err = execCommand(v.Command)
 		}
 		if err != nil {
 			log.Println(err)
@@ -173,6 +177,14 @@ func (s *Failover) makeMaster() (string, error) {
 				break
 			}
 			if !isRecovery {
+				go func() {
+					for _, cmd := range s.makePostPromoteCmds(k, v.Host, v.Port) {
+						if err := execCommand(cmd); err != nil {
+							log.Println(err)
+							continue
+						}
+					}
+				}()
 				return k, nil
 			}
 		}
@@ -195,6 +207,36 @@ func (s *Failover) findStandby() (string, error) {
 		}
 	}
 	return "", ErrNoStandbyFound
+}
+
+func (s *Failover) makePostPromoteCmds(newMaster, host, port string) []string {
+	out := make([]string, 0)
+	for k, v := range s.Config.Servers {
+		if !v.Use || k == newMaster || v.PostPromoteCommand == "" {
+			continue
+		}
+
+		t, err := template.New("t").Parse(v.PostPromoteCommand)
+		if err != nil {
+			log.Printf("error parse template %s %s\n", v.PostPromoteCommand, err)
+		}
+
+		var str strings.Builder
+		if err := t.Execute(&str,
+			struct {
+				Host   string
+				Port   string
+				PgUser string
+			}{
+				host,
+				port,
+				s.Config.PgUser,
+			}); err != nil {
+			log.Printf("error build template %s %s\n", v.PostPromoteCommand, err)
+		}
+		out = append(out, str.String())
+	}
+	return out
 }
 
 func (s *Failover) checkMaster(doneCtx context.Context, pgConn string) error {
@@ -223,7 +265,7 @@ func (s *Failover) checkMaster(doneCtx context.Context, pgConn string) error {
 	}
 }
 
-func wakeupSlave(cmd string) error {
+func execCommand(cmd string) error {
 	c := strings.Split(cmd, " ")
 	out, err := exec.Command(c[0], c[1:]...).CombinedOutput()
 	if err != nil {

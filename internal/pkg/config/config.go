@@ -29,10 +29,13 @@ const (
 
 // Server ...
 type Server struct {
-	Address string `yaml:"address"`
-	Command string `yaml:"command,omitempty"`
-	PgConn  string `yaml:"-"`
-	Use     bool   `yaml:"use"`
+	Address            string `yaml:"address"`
+	Command            string `yaml:"command,omitempty"`
+	PostPromoteCommand string `yaml:"post_promote_command,omitempty"`
+	PgConn             string `yaml:"-"`
+	Use                bool   `yaml:"use"`
+	Host               string `yaml:"-"`
+	Port               string `yaml:"-"`
 }
 
 // Config ...
@@ -148,7 +151,10 @@ func (s *Config) chkConfig() (*Config, error) {
 			}); err != nil {
 			return nil, err
 		}
+		s.Servers[k].Host = host
+		s.Servers[k].Port = port
 		s.Servers[k].PgConn = str.String()
+		s.Servers[k].PostPromoteCommand = strings.TrimSpace(s.Servers[k].PostPromoteCommand)
 	}
 
 	if len(s.Servers) == 0 {

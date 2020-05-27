@@ -12,6 +12,7 @@ pgpf is a simple failover and proxy middleware that works between PostgreSQL ser
 - [Start](#start)
 - [Configure](#configure)
 - [Prometheus metrics](#prometheus_metrics)
+- [Benchmark](#benchmark)
 
 ## How it work
 
@@ -135,3 +136,39 @@ pgpf exports the prometheus metrics listed below
     1: host role is hot-standby
 
     2: host role is master
+
+## Benchmark
+
+without pgpf:
+
+```sh
+$ pgbench -c 20 -j 8 -t 100 -h 192.168.1.31 -U postgres test1
+starting vacuum...end.
+transaction type: <builtin: TPC-B (sort of)>
+scaling factor: 1
+query mode: simple
+number of clients: 20
+number of threads: 8
+number of transactions per client: 100
+number of transactions actually processed: 2000/2000
+latency average = 218.650 ms
+tps = 91.470342 (including connections establishing)
+tps = 91.581986 (excluding connections establishing)
+```
+
+with pgpf:
+
+```sh
+$ pgbench -c 20 -j 8 -t 100 -h 192.168.1.32 -U postgres test1
+starting vacuum...end.
+transaction type: <builtin: TPC-B (sort of)>
+scaling factor: 1
+query mode: simple
+number of clients: 20
+number of threads: 8
+number of transactions per client: 100
+number of transactions actually processed: 2000/2000
+latency average = 284.515 ms
+tps = 70.294974 (including connections establishing)
+tps = 70.380981 (excluding connections establishing)
+```

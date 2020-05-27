@@ -117,7 +117,7 @@ func Test_wakeupSlave(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if err := wakeupSlave(tt.args.cmd); (err != nil) != tt.wantErr {
+			if err := execCommand(tt.args.cmd); (err != nil) != tt.wantErr {
 				t.Errorf("wakeupSlave() error = %v, wantErr %v", err, tt.wantErr)
 			}
 		})
@@ -390,7 +390,7 @@ func TestFailover_findStandby(t *testing.T) {
 	}
 }
 
-func TestFailover_Start(t *testing.T) {
+func TestFailover_startFailover(t *testing.T) {
 	type fields struct {
 		Config      *config.Config
 		Transporter transport.Transporter
@@ -581,3 +581,119 @@ func TestFailover_startChkSatusHosts(t *testing.T) {
 		})
 	}
 }
+
+func TestFailover_makePostPromoteCmds(t *testing.T) {
+	type fields struct {
+		Config *config.Config
+	}
+	type args struct {
+		newMaster string
+		host      string
+		port      string
+	}
+	tests := []struct {
+		name   string
+		fields fields
+		args   args
+		want   []string
+	}{
+		{
+			name: "test 1",
+			fields: fields{
+				Config: &config.Config{
+					PgUser: "postgres",
+					Servers: map[string]*config.Server{
+						"one": {
+							Use: true,
+						},
+						"two": {
+							Use:                true,
+							PostPromoteCommand: "sh2 {{.Host}} {{.Port}} {{.PgUser}}",
+						},
+						"three": {
+							Use:                true,
+							PostPromoteCommand: "sh3 {{.Host}} {{.Port}} {{.PgUser}}",
+						},
+						"four": {
+							Use:                false,
+							PostPromoteCommand: "sh4 {{.Host}} {{.Port}} {{.PgUser}}",
+						},
+					},
+				},
+			},
+			args: args{
+				newMaster: "two",
+				host:      "1.1.1.2",
+				port:      "1234",
+			},
+			want: []string{
+				"sh3 1.1.1.2 1234 postgres",
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			s := &Failover{
+				Config: tt.fields.Config,
+			}
+			if got := s.makePostPromoteCmds(tt.args.newMaster, tt.args.host, tt.args.port); !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("Failover.makePostPromoteCmds() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+// func TestFailover_Start(t *testing.T) {
+// 	type fields struct {
+// 		Config      *config.Config
+// 		Transporter transport.Transporter
+// 		Metricer    metric.Metricer
+// 	}
+// 	tests := []struct {
+// 		name   string
+// 		fields fields
+// 	}{
+// 		{
+// 			name: "test 1",
+// 			fields: fields{
+// 				Config: &config.Config{
+// 					Mutex:              &sync.Mutex{},
+// 					TimeoutWaitPromote: 1,
+// 					TimeoutCheckMaster: 1,
+// 					TimeoutHostStatus:  1,
+// 					MinVerSQLPromote:   12,
+// 					Listen:             ":5432",
+// 					Servers: map[string]*config.Server{
+// 						"one": {
+// 							PgConn: "one",
+// 							Use:    true,
+// 						},
+// 					},
+// 				},
+// 				Transporter: &transport.Mock{
+// 					FOpen:       func(string) error { return nil },
+// 					FIsRecovery: func() (bool, error) { return false, nil },
+// 					FHostStatus: func(h string, p bool) (bool, float64, error) {
+// 						return false, 12, nil
+// 					},
+// 				},
+// 				Metricer: metric.NewMock(),
+// 			},
+// 		},
+// 	}
+// 	for _, tt := range tests {
+// 		t.Run(tt.name, func(t *testing.T) {
+// 			s := &Failover{
+// 				Config:      tt.fields.Config,
+// 				Transporter: tt.fields.Transporter,
+// 				Metricer:    tt.fields.Metricer,
+// 			}
+// 			terminateCtx, cancel := context.WithCancel(context.Background())
+// 			go func(){
+// 				time.Sleep(time.Second)
+// 				cancel()
+// 			}()
+// 			s.Start(terminateCtx)
+// 		})
+// 	}
+// }

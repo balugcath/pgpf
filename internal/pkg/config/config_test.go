@@ -1,6 +1,7 @@
 package config
 
 import (
+	"github.com/stretchr/testify/assert"
 	"reflect"
 	"sync"
 	"testing"
@@ -49,12 +50,20 @@ func TestNewConfig(t *testing.T) {
 				PrometheusListenPort: ":9091",
 				Servers: map[string]*Server{
 					"one": {
-						Address: "192.168.1.25:5432", Use: true,
+						Address: "192.168.1.25:5432", Use: true, Host: "192.168.1.25", Port: "5432",
 						PgConn: "user=postgres password=123 dbname=postgres host=192.168.1.25 port=5432 sslmode=disable",
 					},
-					"two": {Address: "192.168.1.26:5432", Use: true,
-						PgConn:  "user=postgres password=123 dbname=postgres host=192.168.1.26 port=5432 sslmode=disable",
-						Command: "ssh -i id_rsa -o StrictHostKeyChecking=no root@192.168.1.26 touch /var/lib/postgresql/12/data/failover_triggerr",
+					"two": {
+						Address: "192.168.1.26:5432", Use: true, Host: "192.168.1.26", Port: "5432",
+						PgConn:             "user=postgres password=123 dbname=postgres host=192.168.1.26 port=5432 sslmode=disable",
+						Command:            "ssh -i id_rsa -o StrictHostKeyChecking=no root@192.168.1.26 touch /var/lib/postgresql/12/data/failover_triggerr",
+						PostPromoteCommand: "ssh -i id_rsa -o StrictHostKeyChecking=no root@192.168.1.26 /root/change_master.sh {{.Host}} {{.Port}} {{.PgUser}}",
+					},
+					"three": {
+						Address: "192.168.1.27:5432", Use: true, Host: "192.168.1.27", Port: "5432",
+						PgConn:             "user=postgres password=123 dbname=postgres host=192.168.1.27 port=5432 sslmode=disable",
+						Command:            "ssh -i id_rsa -o StrictHostKeyChecking=no root@192.168.1.27 touch /var/lib/postgresql/12/data/failover_triggerr",
+						PostPromoteCommand: "ssh -i id_rsa -o StrictHostKeyChecking=no root@192.168.1.27 /root/change_master.sh {{.Host}} {{.Port}} {{.PgUser}}",
 					},
 				},
 			},
@@ -76,7 +85,7 @@ func TestNewConfig(t *testing.T) {
 				t.Errorf("NewConfig() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
-			if !reflect.DeepEqual(got, tt.want) {
+			if !assert.Equal(t, got, tt.want) {
 				t.Errorf("NewConfig() = %v, want %v", got, tt.want)
 			}
 		})
@@ -155,7 +164,8 @@ func TestConfig_chkConfig(t *testing.T) {
 					"one": {
 						Address: "192.168.1.25:5432", Use: true,
 					},
-					"two": {Address: "192.168.1.26:5432", Use: true,
+					"two": {
+						Address: "192.168.1.26:5432", Use: true,
 						Command: "ssh -i id_rsa -o StrictHostKeyChecking=no root@192.168.1.26 touch /var/lib/postgresql/12/data/failover_triggerr",
 					},
 				},
@@ -178,10 +188,11 @@ func TestConfig_chkConfig(t *testing.T) {
 				PrometheusListenPort: ":9091",
 				Servers: map[string]*Server{
 					"one": {
-						Address: "192.168.1.25:5432", Use: true,
+						Host: "192.168.1.25", Port: "5432", Address: "192.168.1.25:5432", Use: true,
 						PgConn: "user=postgres password=123 dbname=postgres host=192.168.1.25 port=5432 sslmode=disable",
 					},
-					"two": {Address: "192.168.1.26:5432", Use: true,
+					"two": {
+						Host: "192.168.1.26", Port: "5432", Address: "192.168.1.26:5432", Use: true,
 						PgConn:  "user=postgres password=123 dbname=postgres host=192.168.1.26 port=5432 sslmode=disable",
 						Command: "ssh -i id_rsa -o StrictHostKeyChecking=no root@192.168.1.26 touch /var/lib/postgresql/12/data/failover_triggerr",
 					},
@@ -296,7 +307,8 @@ func TestConfig_chkConfig(t *testing.T) {
 					"one": {
 						Address: "192.168.1.25*5432", Use: true,
 					},
-					"two": {Address: "192.168.1.26:5432", Use: true,
+					"two": {
+						Address: "192.168.1.26:5432", Use: true,
 						Command: "ssh -i id_rsa -o StrictHostKeyChecking=no root@192.168.1.26 touch /var/lib/postgresql/12/data/failover_triggerr",
 					},
 				},
