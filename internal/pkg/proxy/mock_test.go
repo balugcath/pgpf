@@ -42,7 +42,7 @@ func Test_echoServer(t *testing.T) {
 			b := make([]byte, 65535)
 
 			go func() {
-				time.Sleep(time.Second)
+				time.Sleep(time.Millisecond * 10)
 				conn, err = net.Dial("tcp", tt.args.address)
 				if err != nil {
 					t.Fatal(err)
@@ -58,16 +58,14 @@ func Test_echoServer(t *testing.T) {
 				return
 			}
 
-			time.Sleep(time.Second)
 			n, err := conn.(io.ReadWriter).Read(b)
 			conn.Close()
 			cancel()
-			time.Sleep(time.Second)
 
 			if !reflect.DeepEqual(b[:n], tt.buf) {
 				t.Errorf("echoServer() = %v, want %v", b[:n], tt.buf)
 			}
-
+			time.Sleep(time.Millisecond * 10)
 		})
 	}
 }

@@ -1,9 +1,13 @@
 package metric
 
 import (
+	"context"
+	"log"
 	"net/http"
+	"time"
 
 	"github.com/balugcath/pgpf/internal/pkg/config"
+	"github.com/balugcath/pgpf/internal/pkg/transport"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
@@ -13,7 +17,6 @@ type Metricer interface {
 	ClientConnInc(string)
 	ClientConnDec(string)
 	TransferBytes(string, string, int)
-	StatusHost(string, int)
 }
 
 const (
@@ -22,17 +25,27 @@ const (
 	pgpfStatusHosts       = "pgpf_status_hosts"
 )
 
+const (
+	hostDead = iota
+	hostStandby
+	hostMaster
+)
+
 // Metric ...
 type Metric struct {
 	*config.Config
+	transport.Transporter
 	clientConn    *prometheus.GaugeVec
 	transferBytes *prometheus.CounterVec
 	statusHosts   *prometheus.GaugeVec
 }
 
 // NewMetric ...
-func NewMetric(config *config.Config) *Metric {
-	s := &Metric{Config: config}
+func NewMetric(cfg *config.Config, tr transport.Transporter) *Metric {
+	s := &Metric{
+		Config:      cfg,
+		Transporter: tr,
+	}
 
 	s.clientConn = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
@@ -65,9 +78,42 @@ func NewMetric(config *config.Config) *Metric {
 }
 
 // Start ...
-func (s *Metric) Start() error {
-	http.Handle("/metrics", promhttp.Handler())
-	return http.ListenAndServe(s.PrometheusListenPort, nil)
+func (s *Metric) Start(doneCtx context.Context) *Metric {
+	if s.Config.PrometheusListenPort == "" {
+		return s
+	}
+
+	go func() {
+		http.Handle("/metrics", promhttp.Handler())
+		log.Fatalln(http.ListenAndServe(s.Config.PrometheusListenPort, nil))
+	}()
+
+	go func() {
+		for {
+			select {
+			case <-doneCtx.Done():
+				return
+			case <-time.After(time.Second * time.Duration(s.Config.TimeoutHostStatus)):
+			}
+			for k, v := range s.Config.Servers {
+				if !v.Use {
+					continue
+				}
+				isRecovery, _, err := s.Transporter.HostStatus(v.PgConn)
+				if err != nil {
+					s.statusHosts.WithLabelValues(k).Set(float64(hostDead))
+					continue
+				}
+				if !isRecovery {
+					s.statusHosts.WithLabelValues(k).Set(float64(hostMaster))
+					continue
+				}
+				s.statusHosts.WithLabelValues(k).Set(float64(hostStandby))
+			}
+		}
+	}()
+
+	return s
 }
 
 // ClientConnInc ...
@@ -83,9 +129,4 @@ func (s *Metric) ClientConnDec(host string) {
 // TransferBytes ...
 func (s *Metric) TransferBytes(host, t string, n int) {
 	s.transferBytes.WithLabelValues(host, t).Add(float64(n))
-}
-
-// StatusHost ...
-func (s *Metric) StatusHost(host string, n int) {
-	s.statusHosts.WithLabelValues(host).Set(float64(n))
 }

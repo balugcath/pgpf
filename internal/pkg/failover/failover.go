@@ -36,36 +36,24 @@ type Failover struct {
 }
 
 // NewFailover ...
-func NewFailover(cfg *config.Config) *Failover {
+func NewFailover(cfg *config.Config, tr transport.Transporter, mtrc metric.Metricer) *Failover {
 	s := &Failover{
-		Config: cfg,
+		Config:      cfg,
+		Transporter: tr,
+		Metricer:    mtrc,
 	}
 	return s
 }
 
 // Start ...
-func (s *Failover) Start(doneCtx context.Context) {
-	mtrc := metric.NewMetric(s.Config)
+func (s *Failover) Start(doneCtx context.Context) *Failover {
 	go func() {
-		if s.Config.PrometheusListenPort == "" {
-			return
-		}
-		log.Fatalln(mtrc.Start())
+		log.Fatalln(s.start(doneCtx))
 	}()
-
-	s.Transporter = &transport.PG{}
-	s.Metricer = mtrc
-
-	go func() {
-		log.Fatalln(s.startFailover(doneCtx))
-	}()
-
-	go func() {
-		s.startChkSatusHosts(doneCtx, &transport.PG{})
-	}()
+	return s
 }
 
-func (s *Failover) startFailover(doneCtx context.Context) error {
+func (s *Failover) start(doneCtx context.Context) error {
 	var wg sync.WaitGroup
 	defer wg.Wait()
 
@@ -219,6 +207,7 @@ func (s *Failover) makePostPromoteCmds(newMaster, host, port string) []string {
 		t, err := template.New("t").Parse(v.PostPromoteCommand)
 		if err != nil {
 			log.Printf("error parse template %s %s\n", v.PostPromoteCommand, err)
+			continue
 		}
 
 		var str strings.Builder
@@ -232,7 +221,8 @@ func (s *Failover) makePostPromoteCmds(newMaster, host, port string) []string {
 				port,
 				s.Config.PgUser,
 			}); err != nil {
-			log.Printf("error build template %s %s\n", v.PostPromoteCommand, err)
+			log.Printf("error execute template %s %s\n", v.PostPromoteCommand, err)
+			continue
 		}
 		out = append(out, str.String())
 	}
@@ -272,35 +262,4 @@ func execCommand(cmd string) error {
 		return fmt.Errorf("%w %s", err, string(out))
 	}
 	return nil
-}
-
-const (
-	hostDead = iota
-	hostStandby
-	hostMaster
-)
-
-func (s *Failover) startChkSatusHosts(doneCtx context.Context, tr transport.Transporter) {
-	for {
-		select {
-		case <-doneCtx.Done():
-			return
-		case <-time.After(time.Second * time.Duration(s.Config.TimeoutHostStatus)):
-		}
-		for k, v := range s.Config.Servers {
-			if !v.Use {
-				continue
-			}
-			isRecovery, _, err := tr.HostStatus(v.PgConn)
-			if err != nil {
-				s.Metricer.StatusHost(k, hostDead)
-				continue
-			}
-			if !isRecovery {
-				s.Metricer.StatusHost(k, hostMaster)
-				continue
-			}
-			s.Metricer.StatusHost(k, hostStandby)
-		}
-	}
 }

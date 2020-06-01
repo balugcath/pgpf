@@ -490,94 +490,16 @@ func TestFailover_startFailover(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			s := NewFailover(tt.fields.Config)
-			s.Transporter = tt.fields.Transporter
-			s.Metricer = tt.fields.Metricer
+			s := NewFailover(tt.fields.Config, tt.fields.Transporter, tt.fields.Metricer)
 			ctx, cancel := context.WithCancel(context.Background())
 			go func() {
 				time.Sleep(time.Second * 2)
 				defer cancel()
 			}()
-			if err := s.startFailover(ctx); !reflect.DeepEqual(err, tt.wantErr) {
+			if err := s.start(ctx); !reflect.DeepEqual(err, tt.wantErr) {
 				t.Errorf("Failover.Start() error = %v, wantErr %v", err, tt.wantErr)
 			}
-		})
-	}
-}
-
-func TestFailover_startChkSatusHosts(t *testing.T) {
-	type fields struct {
-		Config   *config.Config
-		Metricer *metric.Mock
-	}
-	type args struct {
-		tr transport.Transporter
-	}
-	tests := []struct {
-		name   string
-		fields fields
-		args   args
-		want   map[string]int
-	}{
-		{
-			name: "test 1",
-			fields: fields{
-				Config: &config.Config{
-					TimeoutHostStatus: 1,
-					Servers: map[string]*config.Server{
-						"one": {
-							PgConn: "one",
-							Use:    true,
-						},
-						"two": {
-							PgConn: "two",
-							Use:    true,
-						},
-						"three": {
-							PgConn: "three",
-							Use:    true,
-						},
-						"four": {
-							PgConn: "four",
-							Use:    false,
-						},
-					},
-				},
-				Metricer: metric.NewMock(),
-			},
-			args: args{
-				tr: &transport.Mock{
-					FHostStatus: func(h string, p bool) (bool, float64, error) {
-						switch h {
-						case "one":
-							return false, 12, nil
-						case "two":
-							return true, 12, nil
-						default:
-							return true, 12, errors.New("err")
-						}
-					},
-				},
-			},
-			want: map[string]int{"one": hostMaster, "two": hostStandby, "three": hostDead},
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			s := &Failover{
-				Config:   tt.fields.Config,
-				Metricer: tt.fields.Metricer,
-			}
-			ctx, cancel := context.WithCancel(context.Background())
-			go func() {
-				time.Sleep(time.Second * 2)
-				defer cancel()
-			}()
-			s.startChkSatusHosts(ctx, tt.args.tr)
-
-			if !reflect.DeepEqual(tt.fields.Metricer.HostStatusData, tt.want) {
-				t.Errorf("Failover.makeMaster() error = %v, wantErr %v", tt.fields.Metricer.HostStatusData, tt.want)
-			}
+			time.Sleep(time.Millisecond * 10)
 		})
 	}
 }
@@ -642,58 +564,3 @@ func TestFailover_makePostPromoteCmds(t *testing.T) {
 		})
 	}
 }
-
-// func TestFailover_Start(t *testing.T) {
-// 	type fields struct {
-// 		Config      *config.Config
-// 		Transporter transport.Transporter
-// 		Metricer    metric.Metricer
-// 	}
-// 	tests := []struct {
-// 		name   string
-// 		fields fields
-// 	}{
-// 		{
-// 			name: "test 1",
-// 			fields: fields{
-// 				Config: &config.Config{
-// 					Mutex:              &sync.Mutex{},
-// 					TimeoutWaitPromote: 1,
-// 					TimeoutCheckMaster: 1,
-// 					TimeoutHostStatus:  1,
-// 					MinVerSQLPromote:   12,
-// 					Listen:             ":5432",
-// 					Servers: map[string]*config.Server{
-// 						"one": {
-// 							PgConn: "one",
-// 							Use:    true,
-// 						},
-// 					},
-// 				},
-// 				Transporter: &transport.Mock{
-// 					FOpen:       func(string) error { return nil },
-// 					FIsRecovery: func() (bool, error) { return false, nil },
-// 					FHostStatus: func(h string, p bool) (bool, float64, error) {
-// 						return false, 12, nil
-// 					},
-// 				},
-// 				Metricer: metric.NewMock(),
-// 			},
-// 		},
-// 	}
-// 	for _, tt := range tests {
-// 		t.Run(tt.name, func(t *testing.T) {
-// 			s := &Failover{
-// 				Config:      tt.fields.Config,
-// 				Transporter: tt.fields.Transporter,
-// 				Metricer:    tt.fields.Metricer,
-// 			}
-// 			terminateCtx, cancel := context.WithCancel(context.Background())
-// 			go func(){
-// 				time.Sleep(time.Second)
-// 				cancel()
-// 			}()
-// 			s.Start(terminateCtx)
-// 		})
-// 	}
-// }

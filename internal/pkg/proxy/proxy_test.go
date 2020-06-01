@@ -112,7 +112,7 @@ func TestProxy_Serve1(t *testing.T) {
 			bWrite := []byte{1, 2, 3}
 			bRead := make([]byte, 65535)
 			go func() {
-				time.Sleep(time.Second)
+				time.Sleep(time.Millisecond * 10)
 				conn, err := net.Dial("tcp", tt.args.listenAddress)
 				if err != nil {
 					t.Fatal(err)
@@ -131,7 +131,7 @@ func TestProxy_Serve1(t *testing.T) {
 			if !reflect.DeepEqual(bRead, bWrite) {
 				t.Errorf("Proxy.Serve1() = %v, want %v", bWrite, bRead)
 			}
-
+			time.Sleep(time.Millisecond * 10)
 		})
 	}
 }
@@ -181,7 +181,7 @@ func TestProxy_Serve2(t *testing.T) {
 
 			ctx, cancel := context.WithCancel(context.Background())
 			go func() {
-				time.Sleep(time.Second)
+				time.Sleep(time.Millisecond * 10)
 				conn, err := net.Dial("tcp", tt.args.listenAddress)
 				if err != nil {
 					t.Fatal(err)
@@ -193,7 +193,7 @@ func TestProxy_Serve2(t *testing.T) {
 			if err := s.Serve(ctx, tt.args.hostname); (err != nil) != tt.wantErr {
 				t.Errorf("Proxy.Serve2() error = %v, wantErr %v", err, tt.wantErr)
 			}
-
+			time.Sleep(time.Millisecond * 10)
 		})
 	}
 }
@@ -250,13 +250,15 @@ func TestProxy_Serve3(t *testing.T) {
 			bWrite := []byte{1, 2, 3}
 			bRead := make([]byte, 65535)
 			go func() {
-				time.Sleep(time.Second)
+				time.Sleep(time.Millisecond * 10)
 				conn, err := net.Dial("tcp", tt.args.listenAddress)
 				if err != nil {
 					t.Fatal(err)
 				}
-				conn.Write(bWrite)
 				cancelServ()
+				conn.Write(bWrite)
+				time.Sleep(time.Millisecond * 10)
+
 				n, _ := conn.(io.ReadWriter).Read(bRead)
 				bRead = bRead[:n]
 				conn.Close()
@@ -270,7 +272,7 @@ func TestProxy_Serve3(t *testing.T) {
 			if len(bRead) != 0 {
 				t.Errorf("Proxy.Serve3() = %v, want %v", bRead, []byte{})
 			}
-
+			time.Sleep(time.Millisecond * 10)
 		})
 	}
 }

@@ -10,6 +10,8 @@ import (
 
 	"github.com/balugcath/pgpf/internal/pkg/config"
 	"github.com/balugcath/pgpf/internal/pkg/failover"
+	"github.com/balugcath/pgpf/internal/pkg/metric"
+	"github.com/balugcath/pgpf/internal/pkg/transport"
 )
 
 type opts struct {
@@ -21,8 +23,8 @@ type opts struct {
 func main() {
 	options := opts{}
 	flag.StringVar(&options.configFile, "f", "", "config file")
-	flag.StringVar(&options.etcdAddress, "e", "http://192.168.1.16:2379", "etcd address")
-	flag.StringVar(&options.etcdKey, "k", "pgpf", "etcd key")
+	flag.StringVar(&options.etcdAddress, "e", "", "etcd address")
+	flag.StringVar(&options.etcdKey, "k", "", "etcd key")
 	flag.Parse()
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -32,7 +34,8 @@ func main() {
 		log.Fatalln(err)
 	}
 
-	failover.NewFailover(cfg).Start(ctx)
+	mtrc := metric.NewMetric(cfg, &transport.PG{}).Start(ctx)
+	failover.NewFailover(cfg, &transport.PG{}, mtrc).Start(ctx)
 
 	sigs := make(chan os.Signal)
 	signal.Notify(sigs, syscall.SIGTERM, syscall.SIGHUP, syscall.SIGINT)
