@@ -256,8 +256,8 @@ func TestProxy_Serve3(t *testing.T) {
 					t.Fatal(err)
 				}
 				cancelServ()
-				conn.Write(bWrite)
 				time.Sleep(time.Millisecond * 10)
+				conn.Write(bWrite)
 
 				n, _ := conn.(io.ReadWriter).Read(bRead)
 				bRead = bRead[:n]
