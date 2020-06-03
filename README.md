@@ -95,9 +95,15 @@ servers:
   one:
     address: 192.168.1.25:5432
     use: true
+  three:
+    address: 192.168.1.27:5432
+    command: ssh -i id_rsa -o StrictHostKeyChecking=no root@192.168.1.27 touch /var/lib/postgresql/12/data/failover_triggerr
+    post_promote_command: ssh -i id_rsa -o StrictHostKeyChecking=no root@192.168.1.27 /root/change_master.sh {{.Host}} {{.Port}} {{.PgUser}}
+    use: true
   two:
     address: 192.168.1.26:5432
     command: ssh -i id_rsa -o StrictHostKeyChecking=no root@192.168.1.26 touch /var/lib/postgresql/12/data/failover_triggerr
+    post_promote_command: ssh -i id_rsa -o StrictHostKeyChecking=no root@192.168.1.26 /root/change_master.sh {{.Host}} {{.Port}} {{.PgUser}}
     use: true
 ```
 
@@ -122,6 +128,11 @@ servers:
   - command: the command to switch hot-standby to master, is required for versions below 12, for versions above it will use 'select pg_promote()'
 
   - use: server availability flag, required, changes during operation
+
+  - post_promote_command: the command to switch to the new master server, it will be executed for all available hot-standby servers, excluding the new master server. optional. available parameters -
+    - {{.Host}} address new master server
+    - {{.Port}} port new master server
+    - {{.PgUser}} useranme for server access
 
 ## Prometheus metrics
 

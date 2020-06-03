@@ -499,7 +499,6 @@ func TestFailover_startFailover(t *testing.T) {
 			if err := s.start(ctx); !reflect.DeepEqual(err, tt.wantErr) {
 				t.Errorf("Failover.Start() error = %v, wantErr %v", err, tt.wantErr)
 			}
-			time.Sleep(time.Millisecond * 10)
 		})
 	}
 }

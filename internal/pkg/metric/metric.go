@@ -46,6 +46,14 @@ func NewMetric(cfg *config.Config, tr transport.Transporter) *Metric {
 		Config:      cfg,
 		Transporter: tr,
 	}
+	return s
+}
+
+// Start ...
+func (s *Metric) Start(doneCtx context.Context) *Metric {
+	if s.Config.PrometheusListenPort == "" {
+		return s
+	}
 
 	s.clientConn = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
@@ -73,15 +81,6 @@ func NewMetric(cfg *config.Config, tr transport.Transporter) *Metric {
 		[]string{"host"},
 	)
 	prometheus.MustRegister(s.statusHosts)
-
-	return s
-}
-
-// Start ...
-func (s *Metric) Start(doneCtx context.Context) *Metric {
-	if s.Config.PrometheusListenPort == "" {
-		return s
-	}
 
 	go func() {
 		http.Handle("/metrics", promhttp.Handler())
@@ -118,15 +117,21 @@ func (s *Metric) Start(doneCtx context.Context) *Metric {
 
 // ClientConnInc ...
 func (s *Metric) ClientConnInc(host string) {
-	s.clientConn.WithLabelValues(host).Inc()
+	if s.clientConn != nil {
+		s.clientConn.WithLabelValues(host).Inc()
+	}
 }
 
 // ClientConnDec ...
 func (s *Metric) ClientConnDec(host string) {
-	s.clientConn.WithLabelValues(host).Dec()
+	if s.clientConn != nil {
+		s.clientConn.WithLabelValues(host).Dec()
+	}
 }
 
 // TransferBytes ...
 func (s *Metric) TransferBytes(host, t string, n int) {
-	s.transferBytes.WithLabelValues(host, t).Add(float64(n))
+	if s.transferBytes != nil {
+		s.transferBytes.WithLabelValues(host, t).Add(float64(n))
+	}
 }
