@@ -11,12 +11,10 @@ servers:
   three:
     address: 192.168.1.27:5432
     command: ssh -i id_rsa -o StrictHostKeyChecking=no root@192.168.1.27 touch /var/lib/postgresql/12/data/failover_triggerr
-    post_promote_command: ssh -i id_rsa -o StrictHostKeyChecking=no root@192.168.1.27
-      /root/change_master.sh {{.Host}} {{.Port}} {{.PgUser}}
+    post_promote_command: ssh -i id_rsa -o StrictHostKeyChecking=no root@192.168.1.27 /root/change_master.sh {{.Host}} {{.Port}} {{.PgUser}}
     use: true
   two:
     address: 192.168.1.26:5432
     command: ssh -i id_rsa -o StrictHostKeyChecking=no root@192.168.1.26 touch /var/lib/postgresql/12/data/failover_triggerr
-    post_promote_command: ssh -i id_rsa -o StrictHostKeyChecking=no root@192.168.1.26
-      /root/change_master.sh {{.Host}} {{.Port}} {{.PgUser}}
+    post_promote_command: ssh -i id_rsa -o StrictHostKeyChecking=no root@192.168.1.26 /root/change_master.sh {{.Host}} {{.Port}} {{.PgUser}}
     use: true

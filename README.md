@@ -23,8 +23,8 @@ After start pgpf determines the available master server using 'select pg_is_in_r
 Installation from source
 
 ```sh
-$ git clone https://github.com/balugcath/pgpf $GOPATH/src/github.com/balugcath/pgpf
-$ cd $GOPATH/src/github.com/balugcath/pgpf
+$ git clone https://github.com/balugcath/pgpf
+$ cd pgpf
 $ go get -t ./...
 $ go build ./cmd/pgpf/...
 ```

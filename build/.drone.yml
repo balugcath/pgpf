@@ -1,16 +1,12 @@
 kind: pipeline
 name: default
 
-workspace:
-  base: /go
-  path: src/github.com/balugcath/pgpf
-
 steps:
 - name: build
   image: golang:alpine
   environment:
     CGO_ENABLED: 0
-    GO111MODULE: off
+    GO111MODULE: on
   commands:
     - apk add --no-cache git curl
     - go get -v -t -d ./...
