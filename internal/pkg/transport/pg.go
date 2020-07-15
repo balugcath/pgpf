@@ -11,9 +11,7 @@ import (
 	_ "github.com/lib/pq"
 )
 
-const (
-	timeout = 4
-)
+var timeout = 2
 
 // PG ...
 type PG struct {
@@ -35,7 +33,7 @@ func (s *PG) Close() {
 // HostVersion ...
 func (s *PG) HostVersion() (float64, error) {
 	var ver string
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second*timeout)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*time.Duration(timeout))
 	defer cancel()
 	if err := s.db.QueryRowContext(ctx, "show server_version").Scan(&ver); err != nil {
 		return 0, err
@@ -46,7 +44,7 @@ func (s *PG) HostVersion() (float64, error) {
 // IsRecovery ...
 func (s *PG) IsRecovery() (bool, error) {
 	var isRecovery bool
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second*timeout)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*time.Duration(timeout))
 	err := s.db.QueryRowContext(ctx, "select pg_is_in_recovery()").Scan(&isRecovery)
 	defer cancel()
 	return isRecovery, err
@@ -71,7 +69,7 @@ func (s *PG) Promote(pgConn string) error {
 }
 
 func (s *PG) promote() error {
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second*timeout)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*time.Duration(timeout))
 	defer cancel()
 	_, err := s.db.ExecContext(ctx, "select pg_promote(false)")
 	return err

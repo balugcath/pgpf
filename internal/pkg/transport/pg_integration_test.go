@@ -7,6 +7,10 @@ import (
 	"testing"
 )
 
+func init() {
+	timeout = 100000000
+}
+
 func TestPG_HostStatus(t *testing.T) {
 	tests := []struct {
 		name  string
