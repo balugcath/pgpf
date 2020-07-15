@@ -16,7 +16,7 @@ import (
 func TestMetric_Start1(t *testing.T) {
 	type fields struct {
 		Config      *config.Config
-		Transporter transport.Transporter
+		transporter transporter
 	}
 	tests := []struct {
 		name   string
@@ -48,7 +48,7 @@ func TestMetric_Start1(t *testing.T) {
 						},
 					},
 				},
-				Transporter: &transport.Mock{
+				transporter: &transport.Mock{
 					FHostStatus: func(h string, p bool) (bool, float64, error) {
 						switch h {
 						case "one":
@@ -73,7 +73,7 @@ func TestMetric_Start1(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			s := NewMetric(tt.fields.Config, tt.fields.Transporter)
+			s := NewMetric(tt.fields.Config, tt.fields.transporter)
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
 			s.Start(ctx)
@@ -98,7 +98,6 @@ func TestMetric_Start1(t *testing.T) {
 					t.Errorf("TestMetric_Start() error = %v", err)
 				}
 			}
-			time.Sleep(time.Millisecond * 10)
 		})
 	}
 }
@@ -106,7 +105,7 @@ func TestMetric_Start1(t *testing.T) {
 func TestMetric_Start2(t *testing.T) {
 	type fields struct {
 		Config      *config.Config
-		Transporter transport.Transporter
+		transporter transporter
 	}
 	tests := []struct {
 		name   string
@@ -137,7 +136,7 @@ func TestMetric_Start2(t *testing.T) {
 						},
 					},
 				},
-				Transporter: &transport.Mock{
+				transporter: &transport.Mock{
 					FHostStatus: func(h string, p bool) (bool, float64, error) {
 						switch h {
 						case "one":
@@ -162,7 +161,7 @@ func TestMetric_Start2(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			s := NewMetric(tt.fields.Config, tt.fields.Transporter)
+			s := NewMetric(tt.fields.Config, tt.fields.transporter)
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
 			s.Start(ctx)
@@ -171,7 +170,6 @@ func TestMetric_Start2(t *testing.T) {
 			s.ClientConnDec("one")
 			s.TransferBytes("one", "a", 1)
 			s.TransferBytes("one", "b", 1)
-			time.Sleep(time.Millisecond * 10)
 		})
 	}
 }

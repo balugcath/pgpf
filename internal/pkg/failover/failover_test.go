@@ -3,20 +3,26 @@ package failover
 import (
 	"context"
 	"errors"
-	"reflect"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/balugcath/pgpf/internal/pkg/config"
-	"github.com/balugcath/pgpf/internal/pkg/metric"
 	"github.com/balugcath/pgpf/internal/pkg/transport"
+	"github.com/stretchr/testify/assert"
 )
+
+type m struct {
+}
+
+func (m) ClientConnInc(string)              {}
+func (m) ClientConnDec(string)              {}
+func (m) TransferBytes(string, string, int) {}
 
 func TestFailover_checkMaster(t *testing.T) {
 	type fields struct {
 		Config      *config.Config
-		Transporter transport.Transporter
+		transporter transporter
 	}
 	type args struct {
 		pgConn string
@@ -34,7 +40,7 @@ func TestFailover_checkMaster(t *testing.T) {
 					FailoverTimeout:    2,
 					TimeoutCheckMaster: 1,
 				},
-				Transporter: &transport.Mock{
+				transporter: &transport.Mock{
 					FOpen:       func(string) error { return nil },
 					FIsRecovery: func() (bool, error) { return false, nil },
 				},
@@ -49,7 +55,7 @@ func TestFailover_checkMaster(t *testing.T) {
 					FailoverTimeout:    2,
 					TimeoutCheckMaster: 1,
 				},
-				Transporter: &transport.Mock{
+				transporter: &transport.Mock{
 					FOpen:       func(string) error { return errors.New("err") },
 					FIsRecovery: func() (bool, error) { return false, nil },
 				},
@@ -64,7 +70,7 @@ func TestFailover_checkMaster(t *testing.T) {
 					FailoverTimeout:    2,
 					TimeoutCheckMaster: 1,
 				},
-				Transporter: &transport.Mock{
+				transporter: &transport.Mock{
 					FOpen:       func(string) error { return nil },
 					FIsRecovery: func() (bool, error) { return false, errors.New("err") },
 				},
@@ -77,14 +83,14 @@ func TestFailover_checkMaster(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			s := &Failover{
 				Config:      tt.fields.Config,
-				Transporter: tt.fields.Transporter,
+				transporter: tt.fields.transporter,
 			}
 			ctx, cancel := context.WithCancel(context.Background())
 			go func() {
 				time.Sleep(time.Second * 4)
 				defer cancel()
 			}()
-			if err := s.checkMaster(ctx, tt.args.pgConn); !reflect.DeepEqual(err, tt.err) {
+			if err := s.checkMaster(ctx, tt.args.pgConn); !assert.Equal(t, err, tt.err) {
 				t.Errorf("Failover.checkMaster() error = %v, wantErr %v", err, tt.err)
 			}
 		})
@@ -127,7 +133,7 @@ func Test_wakeupSlave(t *testing.T) {
 func TestFailover_makeMaster(t *testing.T) {
 	type fields struct {
 		Config      *config.Config
-		Transporter transport.Transporter
+		transporter transporter
 	}
 	tests := []struct {
 		name    string
@@ -152,7 +158,7 @@ func TestFailover_makeMaster(t *testing.T) {
 						},
 					},
 				},
-				Transporter: &transport.Mock{
+				transporter: &transport.Mock{
 					FHostStatus: func(h string, p bool) (bool, float64, error) {
 						if h == "one" {
 							return false, 12, nil
@@ -181,7 +187,7 @@ func TestFailover_makeMaster(t *testing.T) {
 						},
 					},
 				},
-				Transporter: &transport.Mock{
+				transporter: &transport.Mock{
 					PromoteDone: make(map[string]bool),
 					FHostStatus: func(h string, p bool) (bool, float64, error) {
 						if h == "one" {
@@ -217,7 +223,7 @@ func TestFailover_makeMaster(t *testing.T) {
 						},
 					},
 				},
-				Transporter: &transport.Mock{
+				transporter: &transport.Mock{
 					PromoteDone: make(map[string]bool),
 					FHostStatus: func(h string, p bool) (bool, float64, error) {
 						return true, 12, errors.New("err")
@@ -247,7 +253,7 @@ func TestFailover_makeMaster(t *testing.T) {
 						},
 					},
 				},
-				Transporter: &transport.Mock{
+				transporter: &transport.Mock{
 					PromoteDone: make(map[string]bool),
 					FHostStatus: func(h string, p bool) (bool, float64, error) {
 						return true, 10, nil
@@ -265,10 +271,10 @@ func TestFailover_makeMaster(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			s := &Failover{
 				Config:      tt.fields.Config,
-				Transporter: tt.fields.Transporter,
+				transporter: tt.fields.transporter,
 			}
 			got, err := s.makeMaster()
-			if !reflect.DeepEqual(err, tt.wantErr) {
+			if !assert.Equal(t, err, tt.wantErr) {
 				t.Errorf("Failover.makeMaster() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
@@ -282,7 +288,7 @@ func TestFailover_makeMaster(t *testing.T) {
 func TestFailover_findStandby(t *testing.T) {
 	type fields struct {
 		Config      *config.Config
-		Transporter transport.Transporter
+		transporter transporter
 	}
 	tests := []struct {
 		name    string
@@ -307,7 +313,7 @@ func TestFailover_findStandby(t *testing.T) {
 						},
 					},
 				},
-				Transporter: &transport.Mock{
+				transporter: &transport.Mock{
 					FHostStatus: func(h string, p bool) (bool, float64, error) {
 						if h == "one" {
 							return false, 12, nil
@@ -336,7 +342,7 @@ func TestFailover_findStandby(t *testing.T) {
 						},
 					},
 				},
-				Transporter: &transport.Mock{
+				transporter: &transport.Mock{
 					FHostStatus: func(h string, p bool) (bool, float64, error) {
 						return false, 12, nil
 					},
@@ -362,7 +368,7 @@ func TestFailover_findStandby(t *testing.T) {
 						},
 					},
 				},
-				Transporter: &transport.Mock{
+				transporter: &transport.Mock{
 					FHostStatus: func(h string, p bool) (bool, float64, error) {
 						return false, 12, errors.New("err")
 					},
@@ -376,10 +382,10 @@ func TestFailover_findStandby(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			s := &Failover{
 				Config:      tt.fields.Config,
-				Transporter: tt.fields.Transporter,
+				transporter: tt.fields.transporter,
 			}
 			got, err := s.findStandby()
-			if !reflect.DeepEqual(err, tt.wantErr) {
+			if !assert.Equal(t, err, tt.wantErr) {
 				t.Errorf("Failover.findStandby() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
@@ -393,8 +399,8 @@ func TestFailover_findStandby(t *testing.T) {
 func TestFailover_startFailover(t *testing.T) {
 	type fields struct {
 		Config      *config.Config
-		Transporter transport.Transporter
-		Metricer    metric.Metricer
+		transporter transporter
+		metricer    metricer
 	}
 	tests := []struct {
 		name    string
@@ -410,8 +416,8 @@ func TestFailover_startFailover(t *testing.T) {
 					TimeoutCheckMaster: 1,
 					TimeoutHostStatus:  1,
 					MinVerSQLPromote:   12,
-					Listen:             ":5432",
-					ShardListen:        ":5433",
+					Listen:             ":5051",
+					ShardListen:        ":5052",
 					Servers: map[string]*config.Server{
 						"one": {
 							PgConn: "one",
@@ -423,7 +429,7 @@ func TestFailover_startFailover(t *testing.T) {
 						},
 					},
 				},
-				Transporter: &transport.Mock{
+				transporter: &transport.Mock{
 					PromoteDone: make(map[string]bool),
 					FOpen:       func(string) error { return nil },
 					FIsRecovery: func() (bool, error) { return false, errors.New("err") },
@@ -440,7 +446,7 @@ func TestFailover_startFailover(t *testing.T) {
 						return nil
 					},
 				},
-				Metricer: metric.NewMock(),
+				metricer: m{},
 			},
 			wantErr: ErrTerminate,
 		},
@@ -453,8 +459,8 @@ func TestFailover_startFailover(t *testing.T) {
 					TimeoutCheckMaster: 1,
 					TimeoutHostStatus:  1,
 					MinVerSQLPromote:   12,
-					Listen:             ":5432",
-					ShardListen:        ":5433",
+					Listen:             ":5053",
+					ShardListen:        ":5054",
 					Servers: map[string]*config.Server{
 						"one": {
 							PgConn: "one",
@@ -466,7 +472,7 @@ func TestFailover_startFailover(t *testing.T) {
 						},
 					},
 				},
-				Transporter: &transport.Mock{
+				transporter: &transport.Mock{
 					PromoteDone: make(map[string]bool),
 					FOpen:       func(string) error { return errors.New("err") },
 					FIsRecovery: func() (bool, error) { return false, errors.New("err") },
@@ -483,20 +489,20 @@ func TestFailover_startFailover(t *testing.T) {
 						return nil
 					},
 				},
-				Metricer: metric.NewMock(),
+				metricer: m{},
 			},
 			wantErr: ErrNoMasterFound,
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			s := NewFailover(tt.fields.Config, tt.fields.Transporter, tt.fields.Metricer)
+			s := NewFailover(tt.fields.Config, tt.fields.transporter, tt.fields.metricer)
 			ctx, cancel := context.WithCancel(context.Background())
 			go func() {
 				time.Sleep(time.Second * 2)
 				defer cancel()
 			}()
-			if err := s.start(ctx); !reflect.DeepEqual(err, tt.wantErr) {
+			if err := s.start(ctx); !assert.Equal(t, err, tt.wantErr) {
 				t.Errorf("Failover.Start() error = %v, wantErr %v", err, tt.wantErr)
 			}
 		})
@@ -557,7 +563,7 @@ func TestFailover_makePostPromoteCmds(t *testing.T) {
 			s := &Failover{
 				Config: tt.fields.Config,
 			}
-			if got := s.makePostPromoteCmds(tt.args.newMaster, tt.args.host, tt.args.port); !reflect.DeepEqual(got, tt.want) {
+			if got := s.makePostPromoteCmds(tt.args.newMaster, tt.args.host, tt.args.port); !assert.Equal(t, got, tt.want) {
 				t.Errorf("Failover.makePostPromoteCmds() = %v, want %v", got, tt.want)
 			}
 		})

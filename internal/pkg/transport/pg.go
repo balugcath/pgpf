@@ -12,17 +12,8 @@ import (
 )
 
 const (
-	timeout = 2
+	timeout = 4
 )
-
-// Transporter ...
-type Transporter interface {
-	HostStatus(string) (bool, float64, error)
-	IsRecovery() (bool, error)
-	Close()
-	Open(string) error
-	Promote(string) error
-}
 
 // PG ...
 type PG struct {

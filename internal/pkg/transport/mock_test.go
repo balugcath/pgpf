@@ -1,7 +1,7 @@
 package transport
 
 import (
-	"reflect"
+	"github.com/stretchr/testify/assert"
 	"testing"
 )
 
@@ -90,7 +90,7 @@ func TestMock_Promote(t *testing.T) {
 			if err := s.Promote(tt.args.host); (err != nil) != tt.wantErr {
 				t.Errorf("Mock.Promote() error = %v, wantErr %v", err, tt.wantErr)
 			}
-			if !reflect.DeepEqual(s.PromoteDone, map[string]bool{"one": true}) {
+			if !assert.Equal(t, s.PromoteDone, map[string]bool{"one": true}) {
 				t.Errorf("Mock.Promote() got = %v, want %v", s.PromoteDone, map[string]bool{"one": true})
 			}
 

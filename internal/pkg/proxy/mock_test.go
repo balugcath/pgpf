@@ -3,6 +3,7 @@ package proxy
 import (
 	"context"
 	"io"
+	"log"
 	"net"
 	"reflect"
 	"testing"
@@ -21,13 +22,13 @@ func Test_echoServer(t *testing.T) {
 	}{
 		{
 			name:    "test 1",
-			args:    args{address: ":1234"},
+			args:    args{address: ":5021"},
 			wantErr: false,
 			buf:     []byte{0, 1, 2, 3, 4, 5, 6, 7, 8},
 		},
 		{
 			name:    "test 2",
-			args:    args{address: ":1234"},
+			args:    args{address: ":5022"},
 			wantErr: false,
 			buf:     []byte{1},
 		},
@@ -45,7 +46,7 @@ func Test_echoServer(t *testing.T) {
 				time.Sleep(time.Millisecond * 10)
 				conn, err = net.Dial("tcp", tt.args.address)
 				if err != nil {
-					t.Fatal(err)
+					log.Fatal(err)
 				}
 				conn.Write(tt.buf)
 			}()
@@ -65,7 +66,6 @@ func Test_echoServer(t *testing.T) {
 			if !reflect.DeepEqual(b[:n], tt.buf) {
 				t.Errorf("echoServer() = %v, want %v", b[:n], tt.buf)
 			}
-			time.Sleep(time.Millisecond * 10)
 		})
 	}
 }

@@ -4,18 +4,25 @@ import (
 	"bytes"
 	"context"
 	"io"
+	"log"
 	"net"
 	"reflect"
 	"testing"
 	"time"
 
 	"github.com/balugcath/pgpf/internal/pkg/config"
-	"github.com/balugcath/pgpf/internal/pkg/metric"
 )
+
+type m struct {
+}
+
+func (m) ClientConnInc(string)              {}
+func (m) ClientConnDec(string)              {}
+func (m) TransferBytes(string, string, int) {}
 
 func TestProxy_copy(t *testing.T) {
 	type fields struct {
-		Metricer metric.Metricer
+		metricer metricer
 	}
 	type args struct {
 		dst      io.ReadWriter
@@ -38,7 +45,7 @@ func TestProxy_copy(t *testing.T) {
 				t:        "read",
 			},
 			fields: fields{
-				Metricer: metric.NewMock(),
+				metricer: m{},
 			},
 			wantErr: false,
 			buf:     "1234",
@@ -47,7 +54,7 @@ func TestProxy_copy(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			s := &Proxy{
-				Metricer: tt.fields.Metricer,
+				metricer: tt.fields.metricer,
 			}
 			tt.args.src = bytes.NewBufferString(tt.buf)
 			if err := s.copy(tt.args.dst, tt.args.src, tt.args.hostname, tt.args.t); (err != nil) != tt.wantErr {
@@ -63,7 +70,7 @@ func TestProxy_copy(t *testing.T) {
 func TestProxy_Serve1(t *testing.T) {
 	type fields struct {
 		Config   *config.Config
-		Metricer metric.Metricer
+		metricer metricer
 	}
 	type args struct {
 		listenAddress string
@@ -79,19 +86,19 @@ func TestProxy_Serve1(t *testing.T) {
 		{
 			name: "test 1",
 			args: args{
-				serverAddress: "127.0.0.1:5454",
-				listenAddress: "127.0.0.1:5455",
+				serverAddress: "127.0.0.1:5001",
+				listenAddress: "127.0.0.1:5002",
 				hostname:      "one",
 			},
 			fields: fields{
 				Config: &config.Config{
 					Servers: map[string]*config.Server{
 						"one": {
-							Address: "127.0.0.1:5454",
+							Address: "127.0.0.1:5001",
 						},
 					},
 				},
-				Metricer: metric.NewMock(),
+				metricer: m{},
 			},
 			wantErr: true,
 		},
@@ -102,7 +109,7 @@ func TestProxy_Serve1(t *testing.T) {
 			defer cancelServ()
 			go echoServer(ctxServ, tt.args.serverAddress)
 
-			s, err := NewProxy(tt.fields.Config, tt.fields.Metricer).Listen(tt.args.listenAddress)
+			s, err := NewProxy(tt.fields.Config, tt.fields.metricer).Listen(tt.args.listenAddress)
 			if err != nil {
 				t.Errorf("Proxy.Listen() error = %s", err)
 			}
@@ -115,7 +122,7 @@ func TestProxy_Serve1(t *testing.T) {
 				time.Sleep(time.Millisecond * 10)
 				conn, err := net.Dial("tcp", tt.args.listenAddress)
 				if err != nil {
-					t.Fatal(err)
+					log.Fatal(err)
 				}
 				conn.Write(bWrite)
 				n, _ := conn.(io.ReadWriter).Read(bRead)
@@ -131,7 +138,6 @@ func TestProxy_Serve1(t *testing.T) {
 			if !reflect.DeepEqual(bRead, bWrite) {
 				t.Errorf("Proxy.Serve1() = %v, want %v", bWrite, bRead)
 			}
-			time.Sleep(time.Millisecond * 10)
 		})
 	}
 }
@@ -139,7 +145,7 @@ func TestProxy_Serve1(t *testing.T) {
 func TestProxy_Serve2(t *testing.T) {
 	type fields struct {
 		Config   *config.Config
-		Metricer metric.Metricer
+		metricer metricer
 	}
 	type args struct {
 		listenAddress string
@@ -155,26 +161,26 @@ func TestProxy_Serve2(t *testing.T) {
 		{
 			name: "test 1",
 			args: args{
-				serverAddress: "127.0.0.1:5454",
-				listenAddress: "127.0.0.1:5455",
+				serverAddress: "127.0.0.1:5011",
+				listenAddress: "127.0.0.1:5012",
 				hostname:      "one",
 			},
 			fields: fields{
 				Config: &config.Config{
 					Servers: map[string]*config.Server{
 						"one": {
-							Address: "127.0.0.1:5454",
+							Address: "127.0.0.1:5011",
 						},
 					},
 				},
-				Metricer: metric.NewMock(),
+				metricer: m{},
 			},
 			wantErr: true,
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			s, err := NewProxy(tt.fields.Config, tt.fields.Metricer).Listen(tt.args.listenAddress)
+			s, err := NewProxy(tt.fields.Config, tt.fields.metricer).Listen(tt.args.listenAddress)
 			if err != nil {
 				t.Errorf("Proxy.Listen() error = %s", err)
 			}
@@ -184,7 +190,7 @@ func TestProxy_Serve2(t *testing.T) {
 				time.Sleep(time.Millisecond * 10)
 				conn, err := net.Dial("tcp", tt.args.listenAddress)
 				if err != nil {
-					t.Fatal(err)
+					log.Fatal(err)
 				}
 				conn.Close()
 				cancel()
@@ -193,7 +199,6 @@ func TestProxy_Serve2(t *testing.T) {
 			if err := s.Serve(ctx, tt.args.hostname); (err != nil) != tt.wantErr {
 				t.Errorf("Proxy.Serve2() error = %v, wantErr %v", err, tt.wantErr)
 			}
-			time.Sleep(time.Millisecond * 10)
 		})
 	}
 }

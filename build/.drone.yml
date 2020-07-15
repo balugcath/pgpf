@@ -7,11 +7,17 @@ steps:
   environment:
     CGO_ENABLED: 0
     GO111MODULE: on
+    ETCDCTL_API: 3
+    PGDATA:/pgdata
   commands:
-    - apk add --no-cache git curl
-    - go get -v -t -d ./...
+    - apk add --no-cache git curl postgresql
+    - apk add etcd etcd-ctl --repository=http://dl-cdn.alpinelinux.org/alpine/edge/testing/
+    - mkdir /pgdata /run/postgresql; chown postgres /pgdata /run/postgresql
+    - su -c 'pg_ctl init; pg_ctl start' postgres
+    - etcd &
+    - etcdctl --endpoints http://127.0.0.1:2379 put pgpf < configs/pgpf.yml
     - go build ./cmd/pgpf/...
-    - go test -short -coverprofile coverage.txt ./...
+    - go test -tags integration_test -short -coverprofile coverage.txt ./...
 
 - name: coverage
   image: plugins/codecov

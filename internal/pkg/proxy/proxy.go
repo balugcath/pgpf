@@ -4,13 +4,12 @@ import (
 	"context"
 	"errors"
 	"io"
-	"log"
 	"net"
 	"sync"
 	"time"
 
 	"github.com/balugcath/pgpf/internal/pkg/config"
-	"github.com/balugcath/pgpf/internal/pkg/metric"
+	log "github.com/sirupsen/logrus"
 )
 
 var (
@@ -18,17 +17,23 @@ var (
 	ErrTerminate = errors.New("terminate")
 )
 
+type metricer interface {
+	ClientConnInc(string)
+	ClientConnDec(string)
+	TransferBytes(string, string, int)
+}
+
 // Proxy ...
 type Proxy struct {
 	*config.Config
-	metric.Metricer
+	metricer
 	net.Listener
 }
 
 // NewProxy ...
-func NewProxy(config *config.Config, metricer metric.Metricer) *Proxy {
+func NewProxy(config *config.Config, metricer metricer) *Proxy {
 	s := &Proxy{
-		Metricer: metricer,
+		metricer: metricer,
 		Config:   config,
 	}
 	return s
@@ -38,6 +43,7 @@ func NewProxy(config *config.Config, metricer metric.Metricer) *Proxy {
 func (s *Proxy) Listen(address string) (*Proxy, error) {
 	l, err := net.Listen("tcp", address)
 	if err != nil {
+		log.Debugf("listen error %s", err)
 		return nil, err
 	}
 	s.Listener = l
@@ -48,6 +54,8 @@ func (s *Proxy) Listen(address string) (*Proxy, error) {
 func (s *Proxy) Serve(doneCtx context.Context, hostname string) error {
 	var wg sync.WaitGroup
 	defer wg.Wait()
+	log.Debugf("proxy serve start for %s", hostname)
+	defer log.Debugf("proxy serve exit for %s", hostname)
 
 	addressServer := s.Servers[hostname].Address
 
@@ -56,6 +64,7 @@ func (s *Proxy) Serve(doneCtx context.Context, hostname string) error {
 		defer wg.Done()
 		defer s.Listener.Close()
 		<-doneCtx.Done()
+		log.Debugln("done context received")
 	}()
 
 	for {
@@ -65,7 +74,7 @@ func (s *Proxy) Serve(doneCtx context.Context, hostname string) error {
 			case <-doneCtx.Done():
 				return ErrTerminate
 			default:
-				log.Println(err)
+				log.Errorln(err)
 				continue
 			}
 		}
@@ -78,10 +87,15 @@ func (s *Proxy) Serve(doneCtx context.Context, hostname string) error {
 
 			server, err := net.DialTimeout("tcp", addressServer, time.Second*time.Duration(s.Config.TimeoutMasterDial))
 			if err != nil {
-				log.Println(err)
+				log.Errorln(err)
 				client.Close()
 				return
 			}
+
+			log.Debugf("proxy start %s - %s : %s - %s", client.RemoteAddr().String(), client.LocalAddr().String(),
+				server.LocalAddr().String(), server.RemoteAddr().String())
+			defer log.Debugf("proxy stop %s - %s : %s - %s", client.RemoteAddr().String(), client.LocalAddr().String(),
+				server.LocalAddr().String(), server.RemoteAddr().String())
 
 			s.ClientConnInc(hostname)
 			defer s.ClientConnDec(hostname)
@@ -96,14 +110,14 @@ func (s *Proxy) Serve(doneCtx context.Context, hostname string) error {
 				defer wgCopy.Done()
 				defer cancel()
 				if err := s.copy(server, client, hostname, "read"); err != nil {
-					log.Println(err)
+					log.Errorln(err)
 				}
 			}()
 			go func() {
 				defer wgCopy.Done()
 				defer cancel()
 				if err := s.copy(client, server, hostname, "write"); err != nil {
-					log.Println(err)
+					log.Errorln(err)
 				}
 			}()
 
@@ -117,6 +131,8 @@ func (s *Proxy) Serve(doneCtx context.Context, hostname string) error {
 }
 
 func (s *Proxy) copy(dst, src io.ReadWriter, hostname, t string) error {
+	log.Debugf("copy start %s %s", hostname, t)
+	defer log.Debugf("copy exit %s %s", hostname, t)
 	b := make([]byte, 65535)
 	for {
 		n, err := src.Read(b)
@@ -131,5 +147,6 @@ func (s *Proxy) copy(dst, src io.ReadWriter, hostname, t string) error {
 			return err
 		}
 		s.TransferBytes(hostname, t, n)
+		log.Debugf("copy %s %s %d", hostname, t, n)
 	}
 }

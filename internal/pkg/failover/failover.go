@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
 	"os/exec"
 	"strings"
 	"sync"
@@ -12,9 +11,8 @@ import (
 	"time"
 
 	"github.com/balugcath/pgpf/internal/pkg/config"
-	"github.com/balugcath/pgpf/internal/pkg/metric"
 	"github.com/balugcath/pgpf/internal/pkg/proxy"
-	"github.com/balugcath/pgpf/internal/pkg/transport"
+	log "github.com/sirupsen/logrus"
 )
 
 var (
@@ -28,19 +26,33 @@ var (
 	ErrNoStandbyFound = errors.New("no standby found")
 )
 
+type metricer interface {
+	ClientConnInc(string)
+	ClientConnDec(string)
+	TransferBytes(string, string, int)
+}
+
+type transporter interface {
+	HostStatus(string) (bool, float64, error)
+	IsRecovery() (bool, error)
+	Close()
+	Open(string) error
+	Promote(string) error
+}
+
 // Failover ...
 type Failover struct {
 	*config.Config
-	transport.Transporter
-	metric.Metricer
+	transporter
+	metricer
 }
 
 // NewFailover ...
-func NewFailover(cfg *config.Config, tr transport.Transporter, mtrc metric.Metricer) *Failover {
+func NewFailover(cfg *config.Config, transporter transporter, metricer metricer) *Failover {
 	s := &Failover{
 		Config:      cfg,
-		Transporter: tr,
-		Metricer:    mtrc,
+		transporter: transporter,
+		metricer:    metricer,
 	}
 	return s
 }
@@ -56,6 +68,8 @@ func (s *Failover) Start(doneCtx context.Context) *Failover {
 func (s *Failover) start(doneCtx context.Context) error {
 	var wg sync.WaitGroup
 	defer wg.Wait()
+	log.Debugln("failover start")
+	defer log.Debugln("failover exit")
 
 	for {
 		s.Config.Lock()
@@ -67,29 +81,32 @@ func (s *Failover) start(doneCtx context.Context) error {
 		if err != nil {
 			return err
 		}
-		log.Printf("use master %s\n", masterName)
+		log.Infof("use master %s", masterName)
 
-		masterProxy, err := proxy.NewProxy(s.Config, s.Metricer).Listen(s.Config.Listen)
+		masterProxy, err := proxy.NewProxy(s.Config, s.metricer).Listen(s.Config.Listen)
 		if err != nil {
 			return err
 		}
 
+		if s.Config.ShardListen == "" {
+			log.Debugln("shard port not set, skiping shard server")
+		}
 		for s.Config.ShardListen != "" {
 			standbyName, err := s.findStandby()
 			if err != nil {
-				log.Println(err)
+				log.Errorln(err)
 				break
 			}
-			shardProxy, err := proxy.NewProxy(s.Config, s.Metricer).Listen(s.Config.ShardListen)
+			shardProxy, err := proxy.NewProxy(s.Config, s.metricer).Listen(s.Config.ShardListen)
 			if err != nil {
-				log.Println(err)
+				log.Errorln(err)
 				break
 			}
-			log.Printf("use standby %s\n", standbyName)
+			log.Infof("use standby %s", standbyName)
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
-				log.Printf("standby proxy %s exit %s\n", standbyName, shardProxy.Serve(terminateCtx, standbyName))
+				log.Errorf("standby proxy %s exit %s", standbyName, shardProxy.Serve(terminateCtx, standbyName))
 			}()
 			break
 		}
@@ -98,13 +115,13 @@ func (s *Failover) start(doneCtx context.Context) error {
 		go func() {
 			defer wg.Done()
 			defer cancel()
-			log.Printf("check master %s exit %s\n", masterName, s.checkMaster(terminateCtx, s.Config.Servers[masterName].PgConn))
+			log.Errorf("check master %s exit %s", masterName, s.checkMaster(terminateCtx, s.Config.Servers[masterName].PgConn))
 		}()
 
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			log.Printf("proxy %s exit %s\n", masterName, masterProxy.Serve(terminateCtx, masterName))
+			log.Errorf("proxy %s exit %s", masterName, masterProxy.Serve(terminateCtx, masterName))
 		}()
 
 		s.Config.Unlock()
@@ -115,6 +132,7 @@ func (s *Failover) start(doneCtx context.Context) error {
 		case <-terminateCtx.Done():
 			wg.Wait()
 			s.Config.Servers[masterName].Use = false
+			log.Infof("set master server %s as dead", masterName)
 			s.Config.Save()
 		}
 	}
@@ -122,53 +140,64 @@ func (s *Failover) start(doneCtx context.Context) error {
 
 func (s *Failover) makeMaster() (string, error) {
 	for k, v := range s.Config.Servers {
+		log.Debugf("check server %s", k)
 		if !v.Use {
+			log.Debugf("skip %s server", k)
 			continue
 		}
-		isRecovery, _, err := s.Transporter.HostStatus(v.PgConn)
+		isRecovery, _, err := s.transporter.HostStatus(v.PgConn)
 		if err != nil {
-			log.Println(err)
+			log.Errorln(err)
 			continue
 		}
 		if !isRecovery {
 			return k, nil
 		}
+		log.Debugf("server %s in recovery mode", k)
 	}
+
+	log.Debugln("no master server found, try search standby server")
+
 	for k, v := range s.Config.Servers {
+		log.Debugf("check server %s", k)
 		if !v.Use {
+			log.Debugf("skip %s server", k)
 			continue
 		}
-		log.Printf("try promote %s\n", k)
-		isRecovery, ver, err := s.Transporter.HostStatus(v.PgConn)
+		isRecovery, ver, err := s.transporter.HostStatus(v.PgConn)
 		if err != nil {
-			log.Println(err)
+			log.Errorln(err)
 			continue
 		}
 		if !isRecovery {
+			log.Debugf("server %s is not in recovery mode", k)
 			continue
 		}
+
+		log.Debugf("found server %s version %+v", k, ver)
 		if ver >= s.Config.MinVerSQLPromote {
-			err = s.Transporter.Promote(v.PgConn)
+			err = s.transporter.Promote(v.PgConn)
 		} else {
 			err = execCommand(v.Command)
 		}
 		if err != nil {
-			log.Println(err)
+			log.Errorf("promote error %s, skiping %s", err, k)
 			continue
 		}
 		for y := 0; y <= s.Config.TimeoutWaitPromote; y++ {
 			time.Sleep(time.Second)
-			log.Printf("wait promote %s %d\n", k, y+1)
-			isRecovery, _, err := s.Transporter.HostStatus(v.PgConn)
+			log.Infof("waiting for promote %s %d", k, y+1)
+			isRecovery, _, err := s.transporter.HostStatus(v.PgConn)
 			if err != nil {
-				log.Println(err)
+				log.Errorf("promote error %s, skiping %s", err, k)
 				break
 			}
 			if !isRecovery {
 				go func() {
 					for _, cmd := range s.makePostPromoteCmds(k, v.Host, v.Port) {
+						log.Debugf("exec post promote command %s", cmd)
 						if err := execCommand(cmd); err != nil {
-							log.Println(err)
+							log.Errorln(err)
 							continue
 						}
 					}
@@ -185,9 +214,9 @@ func (s *Failover) findStandby() (string, error) {
 		if !v.Use {
 			continue
 		}
-		isRecovery, _, err := s.Transporter.HostStatus(v.PgConn)
+		isRecovery, _, err := s.transporter.HostStatus(v.PgConn)
 		if err != nil {
-			log.Println(err)
+			log.Errorln(err)
 			continue
 		}
 		if isRecovery {
@@ -206,7 +235,7 @@ func (s *Failover) makePostPromoteCmds(newMaster, host, port string) []string {
 
 		t, err := template.New("t").Parse(v.PostPromoteCommand)
 		if err != nil {
-			log.Printf("error parse template %s %s\n", v.PostPromoteCommand, err)
+			log.Errorf("error parse template %s %s", v.PostPromoteCommand, err)
 			continue
 		}
 
@@ -221,7 +250,7 @@ func (s *Failover) makePostPromoteCmds(newMaster, host, port string) []string {
 				port,
 				s.Config.PgUser,
 			}); err != nil {
-			log.Printf("error execute template %s %s\n", v.PostPromoteCommand, err)
+			log.Errorf("error execute template %s %s", v.PostPromoteCommand, err)
 			continue
 		}
 		out = append(out, str.String())
@@ -230,14 +259,14 @@ func (s *Failover) makePostPromoteCmds(newMaster, host, port string) []string {
 }
 
 func (s *Failover) checkMaster(doneCtx context.Context, pgConn string) error {
-	if err := s.Transporter.Open(pgConn); err != nil {
+	if err := s.transporter.Open(pgConn); err != nil {
 		return err
 	}
-	defer s.Transporter.Close()
+	defer s.transporter.Close()
 
 	failureCount := 0
 	for {
-		_, err := s.Transporter.IsRecovery()
+		_, err := s.transporter.IsRecovery()
 		if err != nil {
 			failureCount++
 		} else {

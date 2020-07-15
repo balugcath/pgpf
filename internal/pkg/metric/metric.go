@@ -2,22 +2,14 @@ package metric
 
 import (
 	"context"
-	"log"
 	"net/http"
 	"time"
 
 	"github.com/balugcath/pgpf/internal/pkg/config"
-	"github.com/balugcath/pgpf/internal/pkg/transport"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	log "github.com/sirupsen/logrus"
 )
-
-// Metricer ...
-type Metricer interface {
-	ClientConnInc(string)
-	ClientConnDec(string)
-	TransferBytes(string, string, int)
-}
 
 const (
 	pgpfClientConnections = "pgpf_client_connections"
@@ -31,20 +23,24 @@ const (
 	hostMaster
 )
 
+type transporter interface {
+	HostStatus(string) (bool, float64, error)
+}
+
 // Metric ...
 type Metric struct {
 	*config.Config
-	transport.Transporter
+	transporter
 	clientConn    *prometheus.GaugeVec
 	transferBytes *prometheus.CounterVec
 	statusHosts   *prometheus.GaugeVec
 }
 
 // NewMetric ...
-func NewMetric(cfg *config.Config, tr transport.Transporter) *Metric {
+func NewMetric(cfg *config.Config, tranporter transporter) *Metric {
 	s := &Metric{
 		Config:      cfg,
-		Transporter: tr,
+		transporter: tranporter,
 	}
 	return s
 }
@@ -95,12 +91,15 @@ func (s *Metric) Start(doneCtx context.Context) *Metric {
 			case <-time.After(time.Second * time.Duration(s.Config.TimeoutHostStatus)):
 			}
 			for k, v := range s.Config.Servers {
+				log.Debugf("check host %s", k)
 				if !v.Use {
+					log.Debugf("skip host %s", k)
 					continue
 				}
-				isRecovery, _, err := s.Transporter.HostStatus(v.PgConn)
+				isRecovery, _, err := s.transporter.HostStatus(v.PgConn)
 				if err != nil {
 					s.statusHosts.WithLabelValues(k).Set(float64(hostDead))
+					log.Errorf("check host error %s", err)
 					continue
 				}
 				if !isRecovery {
