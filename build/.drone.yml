@@ -8,7 +8,7 @@ steps:
     CGO_ENABLED: 0
     GO111MODULE: on
     ETCDCTL_API: 3
-    PGDATA:/pgdata
+    PGDATA: /pgdata
   commands:
     - apk add --no-cache git curl postgresql
     - apk add etcd etcd-ctl --repository=http://dl-cdn.alpinelinux.org/alpine/edge/testing/
