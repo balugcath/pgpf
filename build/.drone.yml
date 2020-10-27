@@ -80,6 +80,9 @@ services:
   image: postgres:latest
   environment:
     POSTGRES_PASSWORD: 123
+  commands:
+  - ls -al
+  - pwd
 
 - name: etcd_service
   image: appcelerator/etcd:latest
