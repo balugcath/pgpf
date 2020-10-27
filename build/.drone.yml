@@ -9,11 +9,13 @@ steps:
     GO111MODULE: on
     ETCDCTL_API: 3
     PGDATA: /pgdata
-  network_mode: host
   commands:
     - ls -la
     - pwd
     - apk add --no-cache git curl
+    - apk add etcd etcd-ctl --repository=http://dl-cdn.alpinelinux.org/alpine/edge/testing/
+    - etcd &
+    - etcdctl --endpoints http://127.0.0.1:2379 put pgpf < configs/pgpf.yml
     - go build ./cmd/pgpf/...
     - go test -tags integration_test -short -coverprofile coverage.txt ./...
 
@@ -77,19 +79,10 @@ steps:
     - tag
 
 services:
-- name: postgres
+- name: postgres_test
   image: postgres:latest
   environment:
     POSTGRES_PASSWORD: 123
-  network_mode: host
-
-- name: etcd
-  image: appcelerator/etcd:latest
-  environment:
-    SERVICE_NAME: "etcd"
-    MIN_SEEDS_COUNT: 1
-    ETCDCTL_API: 3
-  network_mode: host
 
 #volumes:
 #- name: temp
