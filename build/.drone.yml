@@ -9,13 +9,11 @@ steps:
     GO111MODULE: on
     ETCDCTL_API: 3
     PGDATA: /pgdata
+  network_mode: host
   commands:
-    - apk add --no-cache git curl postgresql
-    - apk add etcd etcd-ctl --repository=http://dl-cdn.alpinelinux.org/alpine/edge/testing/
-    - mkdir /pgdata /run/postgresql; chown postgres /pgdata /run/postgresql
-    - su -c 'pg_ctl init; pg_ctl start' postgres
-    - etcd &
-    - etcdctl --endpoints http://127.0.0.1:2379 put pgpf < configs/pgpf.yml
+    - ls -la
+    - pwd
+    - apk add --no-cache git curl
     - go build ./cmd/pgpf/...
     - go test -tags integration_test -short -coverprofile coverage.txt ./...
 
@@ -26,6 +24,9 @@ steps:
       from_secret: codecov_token
     files:
     - coverage.txt
+  when:
+    branch:
+    - master
 
 - name: publish latest docker
   image: plugins/docker
@@ -37,6 +38,8 @@ steps:
       from_secret: dockerhub_token
     dockerfile: build/Dockerfile
   when:
+    branch:
+    - master
     event:
     - push
     - tag
@@ -52,6 +55,8 @@ steps:
       from_secret: dockerhub_token
     dockerfile: build/Dockerfile
   when:
+    branch:
+    - master
     event:
     - tag
 
@@ -66,5 +71,26 @@ steps:
       - md5
       - sha512
   when:
+    branch:
+    - master
     event:
     - tag
+
+services:
+- name: postgres
+  image: postgres:latest
+  environment:
+    POSTGRES_PASSWORD: 123
+  network_mode: host
+
+- name: etcd
+  image: appcelerator/etcd:latest
+  environment:
+    SERVICE_NAME: "etcd"
+    MIN_SEEDS_COUNT: 1
+    ETCDCTL_API: 3
+  network_mode: host
+
+#volumes:
+#- name: temp
+#  temp: {}
