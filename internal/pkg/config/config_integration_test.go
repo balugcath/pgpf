@@ -18,7 +18,7 @@ func TestConfig_NewConfigSave(t *testing.T) {
 	}{
 		{
 			name:        "test 1",
-			etcdAddress: "127.0.0.1:2379",
+			etcdAddress: "etcd_test:2379",
 			etcdKey:     "pgpf",
 		},
 	}
