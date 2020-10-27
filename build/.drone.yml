@@ -87,7 +87,7 @@ services:
 - name: etcd_test
   image: appcelerator/etcd:latest
   environment:
-    SERVICE_NAME: "etcd_test"
+#    SERVICE_NAME: "etcd_test"
     MIN_SEEDS_COUNT: 0
 
 #volumes:
