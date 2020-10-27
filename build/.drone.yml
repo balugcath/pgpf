@@ -13,7 +13,7 @@ steps:
     - apk add --no-cache git curl
     - apk add etcd-ctl --repository=http://dl-cdn.alpinelinux.org/alpine/edge/testing/
     - go build ./cmd/pgpf/...
-    - etcdctl --endpoints http://etcd_test:2379 put pgpf < configs/pgpf.yml
+    - etcdctl --endpoints http://etcd:2379 put pgpf < configs/pgpf.yml
     - go test -tags integration_test -short -coverprofile coverage.txt ./...
 
 - name: coverage
@@ -76,12 +76,12 @@ steps:
     - tag
 
 services:
-- name: postgres_test
+- name: postgres
   image: postgres:latest
   environment:
     POSTGRES_PASSWORD: 123
 
-- name: etcd_test
+- name: etcd
   image: appcelerator/etcd:latest
   environment:
     MIN_SEEDS_COUNT: 0
