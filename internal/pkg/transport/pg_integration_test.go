@@ -27,7 +27,7 @@ func TestPG_HostStatus(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got1, got2, got3 := new(PG).HostStatus("user=postgres password=123 dbname=postgres_service host=postgres sslmode=disable")
+			got1, got2, got3 := new(PG).HostStatus("user=postgres password=123 dbname=postgres host=postgres_service sslmode=disable")
 			if got1 != tt.want1 {
 				t.Errorf("PG.HostStatus() = %v, want %v", got1, tt.want1)
 			}
