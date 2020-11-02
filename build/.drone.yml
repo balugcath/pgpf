@@ -8,9 +8,9 @@ steps:
     CGO_ENABLED: 0
     GO111MODULE: on
     ETCDCTL_API: 3
-  volumes:
-  - name: source
-    path: /drone/src/configs
+#  volumes:
+#  - name: source
+#    path: /drone/src/configs
   commands:
     - apk add --no-cache git curl
     - apk add etcd-ctl --repository=http://dl-cdn.alpinelinux.org/alpine/edge/testing/
@@ -85,15 +85,16 @@ services:
   commands:
   - ls -al /drone/src/
   - ls -al /docker-entrypoint-initdb.d/
-  volumes:
-  - name: source
-    path: /docker-entrypoint-initdb.d
+  - docker-entrypoint.sh postgres
+#  volumes:
+#  - name: source
+#    path: /docker-entrypoint-initdb.d
 
 - name: etcd_service
   image: appcelerator/etcd:latest
   environment:
     MIN_SEEDS_COUNT: 0
 
-volumes:
-- name: source
-  temp: {}
+#volumes:
+#- name: source
+#  temp: {}
