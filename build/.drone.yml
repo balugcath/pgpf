@@ -84,6 +84,9 @@ services:
     POSTGRES_PASSWORD: 123
   commands:
   - ls -al /docker-entrypoint-initdb.d/
+  volumes:
+  - name: source
+    path: /docker-entrypoint-initdb.d
 
 - name: etcd_service
   image: appcelerator/etcd:latest
