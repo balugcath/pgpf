@@ -83,6 +83,7 @@ services:
   environment:
     POSTGRES_PASSWORD: 123
   commands:
+  - ls -al /drone/src/
   - ls -al /docker-entrypoint-initdb.d/
   volumes:
   - name: source
