@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/balugcath/pgpf/internal/pkg/config"
+	"github.com/balugcath/pgpf/pkg/prom_wrap"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -17,25 +18,28 @@ var (
 	ErrTerminate = errors.New("terminate")
 )
 
-type metricer interface {
-	ClientConnInc(string)
-	ClientConnDec(string)
-	TransferBytes(string, string, int)
-}
+const (
+	pgpfClientConnectionsMetricName = "pgpf_client_connections"
+	pgpfClientConnectionsMetricHelp = "pgpf_client_connections"
+	pgpfTransferBytesMetricName     = "pgpf_transfer_bytes"
+	pgpfTransferBytesMetricHelp     = "pgpf_transfer_bytes"
+)
 
 // Proxy ...
 type Proxy struct {
 	*config.Config
-	metricer
+	metric promwrap.Interface
 	net.Listener
 }
 
 // NewProxy ...
-func NewProxy(config *config.Config, metricer metricer) *Proxy {
+func NewProxy(config *config.Config, metric promwrap.Interface) *Proxy {
 	s := &Proxy{
-		metricer: metricer,
-		Config:   config,
+		metric: metric,
+		Config: config,
 	}
+	s.metric.Register(promwrap.GaugeVec, pgpfClientConnectionsMetricName, pgpfClientConnectionsMetricHelp, []string{"host"}...)
+	s.metric.Register(promwrap.CounterVec, pgpfTransferBytesMetricName, pgpfClientConnectionsMetricHelp, []string{"host", "type"}...)
 	return s
 }
 
@@ -97,8 +101,8 @@ func (s *Proxy) Serve(doneCtx context.Context, hostname string) error {
 			defer log.Debugf("proxy stop %s - %s : %s - %s", client.RemoteAddr().String(), client.LocalAddr().String(),
 				server.LocalAddr().String(), server.RemoteAddr().String())
 
-			s.ClientConnInc(hostname)
-			defer s.ClientConnDec(hostname)
+			s.metric.Inc(pgpfClientConnectionsMetricName, []interface{}{hostname}...)
+			defer s.metric.Dec(pgpfClientConnectionsMetricName, []interface{}{hostname}...)
 
 			defer client.Close()
 			defer server.Close()
@@ -146,7 +150,7 @@ func (s *Proxy) copy(dst, src io.ReadWriter, hostname, t string) error {
 		if err != nil {
 			return err
 		}
-		s.TransferBytes(hostname, t, n)
+		s.metric.Add(pgpfTransferBytesMetricName, []interface{}{hostname, t, float64(n)}...)
 		log.Debugf("copy %s %s %d", hostname, t, n)
 	}
 }

@@ -16,14 +16,13 @@ import (
 type m struct {
 }
 
-func (m) ClientConnInc(string)              {}
-func (m) ClientConnDec(string)              {}
-func (m) TransferBytes(string, string, int) {}
+func (m) Register(_ int, _, _ string, _ ...string) error { return nil }
+func (m) Add(_ string, _ ...interface{}) error           { return nil }
+func (m) Set(_ string, _ ...interface{}) error           { return nil }
+func (m) Inc(_ string, _ ...interface{}) error           { return nil }
+func (m) Dec(_ string, _ ...interface{}) error           { return nil }
 
 func TestProxy_copy(t *testing.T) {
-	type fields struct {
-		metricer metricer
-	}
 	type args struct {
 		dst      io.ReadWriter
 		src      io.ReadWriter
@@ -31,8 +30,8 @@ func TestProxy_copy(t *testing.T) {
 		t        string
 	}
 	tests := []struct {
-		name    string
-		fields  fields
+		name string
+		// fields  fields
 		args    args
 		wantErr bool
 		buf     string
@@ -44,9 +43,6 @@ func TestProxy_copy(t *testing.T) {
 				hostname: "one",
 				t:        "read",
 			},
-			fields: fields{
-				metricer: m{},
-			},
 			wantErr: false,
 			buf:     "1234",
 		},
@@ -54,7 +50,7 @@ func TestProxy_copy(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			s := &Proxy{
-				metricer: tt.fields.metricer,
+				metric: m{},
 			}
 			tt.args.src = bytes.NewBufferString(tt.buf)
 			if err := s.copy(tt.args.dst, tt.args.src, tt.args.hostname, tt.args.t); (err != nil) != tt.wantErr {
@@ -69,8 +65,7 @@ func TestProxy_copy(t *testing.T) {
 
 func TestProxy_Serve1(t *testing.T) {
 	type fields struct {
-		Config   *config.Config
-		metricer metricer
+		Config *config.Config
 	}
 	type args struct {
 		listenAddress string
@@ -98,7 +93,6 @@ func TestProxy_Serve1(t *testing.T) {
 						},
 					},
 				},
-				metricer: m{},
 			},
 			wantErr: true,
 		},
@@ -109,7 +103,7 @@ func TestProxy_Serve1(t *testing.T) {
 			defer cancelServ()
 			go echoServer(ctxServ, tt.args.serverAddress)
 
-			s, err := NewProxy(tt.fields.Config, tt.fields.metricer).Listen(tt.args.listenAddress)
+			s, err := NewProxy(tt.fields.Config, m{}).Listen(tt.args.listenAddress)
 			if err != nil {
 				t.Errorf("Proxy.Listen() error = %s", err)
 			}
@@ -144,8 +138,7 @@ func TestProxy_Serve1(t *testing.T) {
 
 func TestProxy_Serve2(t *testing.T) {
 	type fields struct {
-		Config   *config.Config
-		metricer metricer
+		Config *config.Config
 	}
 	type args struct {
 		listenAddress string
@@ -173,14 +166,13 @@ func TestProxy_Serve2(t *testing.T) {
 						},
 					},
 				},
-				metricer: m{},
 			},
 			wantErr: true,
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			s, err := NewProxy(tt.fields.Config, tt.fields.metricer).Listen(tt.args.listenAddress)
+			s, err := NewProxy(tt.fields.Config, m{}).Listen(tt.args.listenAddress)
 			if err != nil {
 				t.Errorf("Proxy.Listen() error = %s", err)
 			}

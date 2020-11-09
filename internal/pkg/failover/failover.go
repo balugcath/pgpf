@@ -12,6 +12,7 @@ import (
 
 	"github.com/balugcath/pgpf/internal/pkg/config"
 	"github.com/balugcath/pgpf/internal/pkg/proxy"
+	"github.com/balugcath/pgpf/pkg/prom_wrap"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -26,12 +27,6 @@ var (
 	ErrNoStandbyFound = errors.New("no standby found")
 )
 
-type metricer interface {
-	ClientConnInc(string)
-	ClientConnDec(string)
-	TransferBytes(string, string, int)
-}
-
 type transporter interface {
 	HostStatus(string) (bool, float64, error)
 	IsRecovery() (bool, error)
@@ -44,15 +39,15 @@ type transporter interface {
 type Failover struct {
 	*config.Config
 	transporter
-	metricer
+	metric promwrap.Interface
 }
 
 // NewFailover ...
-func NewFailover(cfg *config.Config, transporter transporter, metricer metricer) *Failover {
+func NewFailover(cfg *config.Config, transporter transporter, metric promwrap.Interface) *Failover {
 	s := &Failover{
 		Config:      cfg,
 		transporter: transporter,
-		metricer:    metricer,
+		metric:      metric,
 	}
 	return s
 }
@@ -83,7 +78,7 @@ func (s *Failover) start(doneCtx context.Context) error {
 		}
 		log.Infof("use master %s", masterName)
 
-		masterProxy, err := proxy.NewProxy(s.Config, s.metricer).Listen(s.Config.Listen)
+		masterProxy, err := proxy.NewProxy(s.Config, s.metric).Listen(s.Config.Listen)
 		if err != nil {
 			return err
 		}
@@ -97,7 +92,7 @@ func (s *Failover) start(doneCtx context.Context) error {
 				log.Errorln(err)
 				break
 			}
-			shardProxy, err := proxy.NewProxy(s.Config, s.metricer).Listen(s.Config.ShardListen)
+			shardProxy, err := proxy.NewProxy(s.Config, s.metric).Listen(s.Config.ShardListen)
 			if err != nil {
 				log.Errorln(err)
 				break

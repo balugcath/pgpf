@@ -15,9 +15,11 @@ import (
 type m struct {
 }
 
-func (m) ClientConnInc(string)              {}
-func (m) ClientConnDec(string)              {}
-func (m) TransferBytes(string, string, int) {}
+func (m) Register(_ int, _, _ string, _ ...string) error { return nil }
+func (m) Add(_ string, _ ...interface{}) error           { return nil }
+func (m) Set(_ string, _ ...interface{}) error           { return nil }
+func (m) Inc(_ string, _ ...interface{}) error           { return nil }
+func (m) Dec(_ string, _ ...interface{}) error           { return nil }
 
 func TestFailover_checkMaster(t *testing.T) {
 	type fields struct {
@@ -400,7 +402,6 @@ func TestFailover_startFailover(t *testing.T) {
 	type fields struct {
 		Config      *config.Config
 		transporter transporter
-		metricer    metricer
 	}
 	tests := []struct {
 		name    string
@@ -446,7 +447,6 @@ func TestFailover_startFailover(t *testing.T) {
 						return nil
 					},
 				},
-				metricer: m{},
 			},
 			wantErr: ErrTerminate,
 		},
@@ -489,14 +489,13 @@ func TestFailover_startFailover(t *testing.T) {
 						return nil
 					},
 				},
-				metricer: m{},
 			},
 			wantErr: ErrNoMasterFound,
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			s := NewFailover(tt.fields.Config, tt.fields.transporter, tt.fields.metricer)
+			s := NewFailover(tt.fields.Config, tt.fields.transporter, m{})
 			ctx, cancel := context.WithCancel(context.Background())
 			go func() {
 				time.Sleep(time.Second * 2)

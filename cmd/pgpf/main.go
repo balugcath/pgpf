@@ -9,8 +9,9 @@ import (
 
 	"github.com/balugcath/pgpf/internal/pkg/config"
 	"github.com/balugcath/pgpf/internal/pkg/failover"
-	"github.com/balugcath/pgpf/internal/pkg/metric"
+	rtm "github.com/balugcath/pgpf/internal/pkg/runtime_metric"
 	"github.com/balugcath/pgpf/internal/pkg/transport"
+	"github.com/balugcath/pgpf/pkg/prom_wrap"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -42,8 +43,16 @@ func main() {
 		log.Fatalln(err)
 	}
 
-	mtrc := metric.NewMetric(cfg, &transport.PG{}).Start(ctx)
-	failover.NewFailover(cfg, &transport.PG{}, mtrc).Start(ctx)
+	metric := promwrap.NewProm(cfg.PrometheusListenPort, "/metrics")
+	if cfg.PrometheusListenPort != "" {
+		go func() {
+			log.Fatalln(metric.Start())
+		}()
+	}
+
+	failover.NewFailover(cfg, &transport.PG{}, metric).Start(ctx)
+
+	rtm.NewHostStatus(cfg, metric, &transport.PG{}).Start()
 
 	sigs := make(chan os.Signal)
 	signal.Notify(sigs, syscall.SIGTERM, syscall.SIGHUP, syscall.SIGINT)
