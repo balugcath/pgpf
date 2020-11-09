@@ -1,6 +1,6 @@
 module github.com/balugcath/pgpf
 
-go 1.14
+go 1.15
 
 replace github.com/coreos/bbolt v1.3.4 => go.etcd.io/bbolt v1.3.4
 
