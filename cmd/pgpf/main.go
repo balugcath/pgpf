@@ -9,9 +9,9 @@ import (
 
 	"github.com/balugcath/pgpf/internal/pkg/config"
 	"github.com/balugcath/pgpf/internal/pkg/failover"
-	rtm "github.com/balugcath/pgpf/internal/pkg/runtime_metric"
+	rtm "github.com/balugcath/pgpf/internal/pkg/rtmetric"
 	"github.com/balugcath/pgpf/internal/pkg/transport"
-	"github.com/balugcath/pgpf/pkg/prom_wrap"
+	"github.com/balugcath/pgpf/pkg/promwrap"
 	log "github.com/sirupsen/logrus"
 )
 

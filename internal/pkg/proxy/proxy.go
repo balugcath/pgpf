@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/balugcath/pgpf/internal/pkg/config"
-	"github.com/balugcath/pgpf/pkg/prom_wrap"
+	"github.com/balugcath/pgpf/pkg/promwrap"
 	log "github.com/sirupsen/logrus"
 )
 
