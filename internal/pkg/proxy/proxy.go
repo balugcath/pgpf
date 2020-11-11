@@ -113,15 +113,19 @@ func (s *Proxy) Serve(doneCtx context.Context, hostname string) error {
 			go func() {
 				defer wgCopy.Done()
 				defer cancel()
-				if err := s.copy(server, client, hostname, "read"); err != nil {
-					log.Errorln(err)
+				if _, err := s.copy(server, client, hostname, "read"); err != nil {
+					if err != io.EOF {
+						log.Errorln(err)
+					}
 				}
 			}()
 			go func() {
 				defer wgCopy.Done()
 				defer cancel()
-				if err := s.copy(client, server, hostname, "write"); err != nil {
-					log.Errorln(err)
+				if _, err := s.copy(client, server, hostname, "write"); err != nil {
+					if err != io.EOF {
+						log.Errorln(err)
+					}
 				}
 			}()
 
@@ -134,21 +138,22 @@ func (s *Proxy) Serve(doneCtx context.Context, hostname string) error {
 	}
 }
 
-func (s *Proxy) copy(dst, src io.ReadWriter, hostname, t string) error {
+func (s *Proxy) copy(dst io.Writer, src io.Reader, hostname, t string) (int, error) {
 	log.Debugf("copy start %s %s", hostname, t)
 	defer log.Debugf("copy exit %s %s", hostname, t)
 	b := make([]byte, 65535)
+	total := 0
 	for {
 		n, err := src.Read(b)
-		if err != nil {
-			if err == io.EOF {
-				return nil
+		total += n
+		if n != 0 {
+			_, err := dst.Write(b[:n])
+			if err != nil {
+				return total, err
 			}
-			return err
 		}
-		_, err = dst.Write(b[:n])
 		if err != nil {
-			return err
+			return total, err
 		}
 		s.metric.Add(pgpfTransferBytesMetricName, []interface{}{hostname, t, float64(n)}...)
 		log.Debugf("copy %s %s %d", hostname, t, n)
