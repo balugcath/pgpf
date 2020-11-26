@@ -1,0 +1,3 @@
+listen: :5432
+pg_user: postgres
+pg_passwd: "123"
