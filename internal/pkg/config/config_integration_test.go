@@ -9,7 +9,7 @@ import (
 )
 
 const (
-	etcdAddress = "192.168.1.16:2379"
+	etcdAddress = "etcd_service:2379"
 )
 
 func TestConfig_SaveEtcd(t *testing.T) {

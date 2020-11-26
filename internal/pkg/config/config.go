@@ -18,6 +18,8 @@ const (
 	pgConnTemplate = "user={{.PGUser}} password={{.PGPasswd}} dbname=postgres host={{.Host}} port={{.Port}} sslmode=disable"
 )
 
+var connTimeout = time.Second * 8
+
 // Server ...
 type Server struct {
 	Address            string `yaml:"address"`
@@ -163,7 +165,7 @@ func (s *Config) Save() error {
 		if err != nil {
 			return err
 		}
-		ctx, cancel := context.WithTimeout(context.Background(), time.Second*4)
+		ctx, cancel := context.WithTimeout(context.Background(), connTimeout)
 		defer cancel()
 		_, err = cli.Put(ctx, s.etcdKey, string(b))
 		if err != nil {
@@ -198,7 +200,7 @@ func (s *Config) load() error {
 		}
 		defer cli.Close()
 
-		ctx, cancel := context.WithTimeout(context.Background(), time.Second*4)
+		ctx, cancel := context.WithTimeout(context.Background(), connTimeout)
 		defer cancel()
 		resp, err := cli.Get(ctx, s.etcdKey)
 		if err != nil {

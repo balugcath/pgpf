@@ -8,8 +8,7 @@ import (
 )
 
 const (
-	//	dbConn = "user=postgres password=123 dbname=postgres host=postgres_service sslmode=disable"
-	dbConn = "user=postgres password=123 dbname=postgres host=192.168.1.31 sslmode=disable"
+	dbConn = "user=postgres password=123 dbname=postgres host=postgres_service sslmode=disable"
 )
 
 func TestPG_HostVersion1(t *testing.T) {
