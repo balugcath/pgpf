@@ -50,7 +50,9 @@ func main() {
 		}()
 	}
 
-	failover.NewFailover(cfg, &transport.PG{}, metric).Start(ctx)
+	go func() {
+		log.Fatalln(failover.NewFailover(cfg, &transport.PG{}, metric).Start(ctx))
+	}()
 
 	rtm.NewHostStatus(cfg, metric, &transport.PG{}).Start()
 

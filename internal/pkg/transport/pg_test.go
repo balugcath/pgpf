@@ -2,6 +2,7 @@ package transport
 
 import (
 	"errors"
+	"fmt"
 	"testing"
 
 	"github.com/DATA-DOG/go-sqlmock"
@@ -29,7 +30,7 @@ func TestPG_Promote(t *testing.T) {
 
 			s := &PG{db: db}
 
-			if err := s.promote(); (err != nil) != tt.wantErr {
+			if err := s.Promote(); (err != nil) != tt.wantErr {
 				t.Errorf("PG.Promote() error = %v, wantErr %v", err, tt.wantErr)
 			}
 			if err := mock.ExpectationsWereMet(); err != nil {
@@ -125,19 +126,25 @@ func TestPG_HostVersion(t *testing.T) {
 	}
 }
 
-func TestPG_hostStatus(t *testing.T) {
+func TestPG_ChangePrimaryConn(t *testing.T) {
+	type args struct {
+		host string
+		port string
+		user string
+	}
 	tests := []struct {
 		name    string
-		want    bool
-		want1   float64
 		wantErr bool
-		err     error
+		args    args
 	}{
 		{
 			name:    "test 1",
-			want:    true,
-			want1:   11,
 			wantErr: false,
+			args: args{
+				host: "1",
+				port: "2",
+				user: "3",
+			},
 		},
 	}
 	for _, tt := range tests {
@@ -147,22 +154,20 @@ func TestPG_hostStatus(t *testing.T) {
 				t.Fatalf("an error '%s' was not expected when opening a stub database connection", err)
 			}
 			defer db.Close()
-			mock.ExpectQuery("select pg_is_in_recovery\\(\\)").WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(true))
-			mock.ExpectQuery("show server_version").WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(11)).WillReturnError(tt.err)
+
+			mock.ExpectExec("alter system set primary_conninfo to " +
+				fmt.Sprintf("'user=%s host=%s port=%s sslmode=prefer sslcompression=1 target_session_attrs=any'",
+					tt.args.user, tt.args.host, tt.args.port)).WillReturnResult(sqlmock.NewResult(0, 0))
 
 			s := &PG{db: db}
 
-			got, got1, err := s.hostStatus()
-			if (err != nil) != tt.wantErr {
-				t.Errorf("PG.hostStatus() error = %v, wantErr %v", err, tt.wantErr)
-				return
+			if err := s.ChangePrimaryConn(tt.args.host, tt.args.user, tt.args.port); (err != nil) != tt.wantErr {
+				t.Errorf("PG.ChangePrimaryConn() error = %v, wantErr %v", err, tt.wantErr)
 			}
-			if got != tt.want {
-				t.Errorf("PG.hostStatus() got = %v, want %v", got, tt.want)
+			if err := mock.ExpectationsWereMet(); err != nil {
+				t.Errorf("there were unfulfilled expectations: %s", err)
 			}
-			if got1 != tt.want1 {
-				t.Errorf("PG.hostStatus() got1 = %v, want %v", got1, tt.want1)
-			}
+
 		})
 	}
 }

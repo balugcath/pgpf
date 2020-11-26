@@ -1,4 +1,4 @@
-// +build integration_test
+// +built integration_test
 // see ../../../build/.drone.yml
 
 package transport
@@ -7,35 +7,41 @@ import (
 	"testing"
 )
 
-func init() {
-	timeout = 100000000
-}
+const (
+	//	dbConn = "user=postgres password=123 dbname=postgres host=postgres_service sslmode=disable"
+	dbConn = "user=postgres password=123 dbname=postgres host=192.168.1.31 sslmode=disable"
+)
 
-func TestPG_HostStatus(t *testing.T) {
+func TestPG_HostVersion1(t *testing.T) {
 	tests := []struct {
-		name  string
-		want1 bool
-		want2 float64
-		want3 error
+		name    string
+		want    float64
+		wantErr bool
+		err     error
 	}{
 		{
-			name:  "test 1",
-			want1: false,
-			want2: 12,
-			want3: nil,
+			name:    "test 1",
+			wantErr: false,
+			want:    12,
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got1, got2, got3 := new(PG).HostStatus("user=postgres password=123 dbname=postgres host=postgres_service sslmode=disable")
-			if got1 != tt.want1 {
-				t.Errorf("PG.HostStatus() = %v, want %v", got1, tt.want1)
+
+			s := new(PG)
+			err := s.Open(dbConn)
+			if err != nil {
+				t.Fatalf("PG.HostVersion1() got error = %v", err)
 			}
-			if got2 < tt.want2 {
-				t.Errorf("PG.HostStatus() = %v, want %v", got2, tt.want2)
+			defer s.Close()
+
+			got, err := s.HostVersion()
+			if (err != nil) != tt.wantErr {
+				t.Errorf("PG.HostVersion1() error = %v, wantErr %v", err, tt.wantErr)
+				return
 			}
-			if got3 != tt.want3 {
-				t.Errorf("PG.HostStatus() = %v, want %v", got3, tt.want3)
+			if tt.want > got {
+				t.Errorf("PG.HostVersion1() = %v, want %v", got, tt.want)
 			}
 		})
 	}

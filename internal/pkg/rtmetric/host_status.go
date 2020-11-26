@@ -10,7 +10,7 @@ import (
 
 const (
 	pgpfStatusHostsMetricName = "pgpf_status_hosts"
-	pgpfStatusHostsMetricHelp = "pgpf_status_hosts"
+	pgpfStatusHostsMetricHelp = "status hosts"
 )
 
 const (
@@ -20,7 +20,9 @@ const (
 )
 
 type transporter interface {
-	HostStatus(string) (bool, float64, error)
+	IsRecovery() (bool, error)
+	Open(string) error
+	Close()
 }
 
 // HostStatus ...
@@ -29,6 +31,8 @@ type HostStatus struct {
 	*config.Config
 	transporter
 }
+
+var timeUnit = time.Second
 
 // NewHostStatus ...
 func NewHostStatus(config *config.Config, metric promwrap.Interface, transporter transporter) *HostStatus {
@@ -40,27 +44,38 @@ func NewHostStatus(config *config.Config, metric promwrap.Interface, transporter
 
 // Start ...
 func (s *HostStatus) Start() {
+	if s.Config.HostStatusIntervalSec == 0 {
+		return
+	}
 	go func() {
 		for {
 			for k, v := range s.Config.Servers {
-				log.Debugf("check host %s", k)
+				log.Debugf("rtmetric.Start() host %s check", k)
 				if !v.Use {
-					log.Debugf("skip host %s", k)
+					log.Debugf("rtmetric.Start() host %s skip", k)
 					continue
 				}
-				isRecovery, _, err := s.transporter.HostStatus(v.PgConn)
-				if err != nil {
+				if err := s.transporter.Open(v.PgConn); err != nil {
 					s.metric.Set(pgpfStatusHostsMetricName, []interface{}{k, float64(hostDead)}...)
-					log.Errorf("check host error %s", err)
+					log.Errorf("rtmetric.Start() host %s %s", k, err)
+					continue
+				}
+				isRecovery, err := s.transporter.IsRecovery()
+				if err != nil {
+					log.Errorf("rtmetric.Start() host %s %s", k, err)
+					s.metric.Set(pgpfStatusHostsMetricName, []interface{}{k, float64(hostDead)}...)
+					s.transporter.Close()
 					continue
 				}
 				if !isRecovery {
 					s.metric.Set(pgpfStatusHostsMetricName, []interface{}{k, float64(hostMaster)}...)
+					s.transporter.Close()
 					continue
 				}
 				s.metric.Set(pgpfStatusHostsMetricName, []interface{}{k, float64(hostStandby)}...)
+				s.transporter.Close()
 			}
-			<-time.After(time.Second * time.Duration(s.Config.TimeoutHostStatus))
+			<-time.After(time.Duration(s.Config.HostStatusIntervalSec) * timeUnit)
 		}
 	}()
 }

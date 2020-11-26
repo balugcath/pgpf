@@ -35,6 +35,8 @@ get docker image
 $ docker pull balugcath/pgpf
 ```
 
+get binary release from github
+
 ## Start
 
 pgpf start example
@@ -91,6 +93,9 @@ failover_timeout: 2
 pg_user: postgres
 pg_passwd: "123"
 prometheus_listen_port: :9091
+host_status_interval: 4
+check_master_interval: 2
+master_dial_timeout: 1
 servers:
   one:
     address: 192.168.1.25:5432
@@ -111,13 +116,19 @@ servers:
 
 - shard_listen: listen port for client access to hot-standby server, optional
 
-- failover_timeout: timeout for switching to hot-standby after detecting access errors to the master server, optional, seconds
+- failover_timeout: timeout for switching to hot-standby after detecting access errors to the master server, optional, seconds, default 8, should be great than check_master_interval
 
 - pg_user: username for server access, required
 
 - pg_passwd: password for server access, required
 
 - prometheus_listen_port: listen port for access to prometheus metrics, optional
+
+- host_status_interval: servers check interval, optional, default 10, seconds 
+
+- check_master_interval: master check interval, optional, default 1, seconds
+
+- master_dial_timeout: connection establishment timeout for proxy, optional, default 1, seconds
 
 - servers: array of definitions of available servers, required
 
@@ -129,7 +140,7 @@ servers:
 
   - use: server availability flag, required, changes during operation
 
-  - post_promote_command: the command to switch to the new master server, it will be executed for all available hot-standby servers, excluding the new master server. optional. available parameters -
+  - post_promote_command: the command to switch to the new master server, it will be executed for all available hot-standby servers, excluding the new master server, optional. available parameters -
     - {{.Host}} address new master server
     - {{.Port}} port new master server
     - {{.PgUser}} useranme for server access

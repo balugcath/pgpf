@@ -3,6 +3,7 @@ package transport
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"strconv"
 	"strings"
 	"time"
@@ -11,7 +12,7 @@ import (
 	_ "github.com/lib/pq"
 )
 
-var timeout = 2
+var queryTimeout = 2 * time.Second
 
 // PG ...
 type PG struct {
@@ -33,7 +34,7 @@ func (s *PG) Close() {
 // HostVersion ...
 func (s *PG) HostVersion() (float64, error) {
 	var ver string
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second*time.Duration(timeout))
+	ctx, cancel := context.WithTimeout(context.Background(), queryTimeout)
 	defer cancel()
 	if err := s.db.QueryRowContext(ctx, "show server_version").Scan(&ver); err != nil {
 		return 0, err
@@ -44,42 +45,25 @@ func (s *PG) HostVersion() (float64, error) {
 // IsRecovery ...
 func (s *PG) IsRecovery() (bool, error) {
 	var isRecovery bool
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second*time.Duration(timeout))
+	ctx, cancel := context.WithTimeout(context.Background(), queryTimeout)
 	err := s.db.QueryRowContext(ctx, "select pg_is_in_recovery()").Scan(&isRecovery)
 	defer cancel()
 	return isRecovery, err
 }
 
-// HostStatus ...
-func (s *PG) HostStatus(pgConn string) (bool, float64, error) {
-	if err := s.Open(pgConn); err != nil {
-		return false, 0, err
-	}
-	defer s.Close()
-	return s.hostStatus()
-}
-
 // Promote ...
-func (s *PG) Promote(pgConn string) error {
-	if err := s.Open(pgConn); err != nil {
-		return err
-	}
-	defer s.Close()
-	return s.promote()
-}
-
-func (s *PG) promote() error {
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second*time.Duration(timeout))
+func (s *PG) Promote() error {
+	ctx, cancel := context.WithTimeout(context.Background(), queryTimeout)
 	defer cancel()
 	_, err := s.db.ExecContext(ctx, "select pg_promote(false)")
 	return err
 }
 
-func (s *PG) hostStatus() (bool, float64, error) {
-	isRecovery, err := s.IsRecovery()
-	if err != nil {
-		return false, 0, err
-	}
-	ver, err := s.HostVersion()
-	return isRecovery, ver, err
+// ChangePrimaryConn ...
+func (s *PG) ChangePrimaryConn(host, user, port string) error {
+	ctx, cancel := context.WithTimeout(context.Background(), queryTimeout)
+	defer cancel()
+	_, err := s.db.ExecContext(ctx, "alter system set primary_conninfo to "+
+		fmt.Sprintf("'user=%s host=%s port=%s sslmode=prefer sslcompression=1 target_session_attrs=any'", user, host, port))
+	return err
 }

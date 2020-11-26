@@ -9,17 +9,46 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-type tr struct{}
+var errFoo = errors.New("err foo")
 
-func (tr) HostStatus(conn string) (bool, float64, error) {
-	switch conn {
-	case "one":
-		return false, 12, nil
-	case "two":
-		return true, 12, nil
-	default:
-		return true, 12, errors.New("err")
+func init() {
+	timeUnit = time.Millisecond
+}
+
+type trMock struct {
+	retOpen       map[string][]error
+	retPromote    map[string][]error
+	retIsRecovery map[string][]struct {
+		f   bool
+		err error
 	}
+	retHostVersion map[string][]struct {
+		v   float64
+		err error
+	}
+	key string
+}
+
+func (s *trMock) Open(key string) (err error) {
+	s.key = key
+	err = s.retOpen[s.key][0]
+	if len(s.retOpen[s.key]) > 1 {
+		s.retOpen[s.key] = s.retOpen[s.key][1:]
+	}
+	return
+}
+
+func (s *trMock) Close() {
+	s.key = ""
+}
+
+func (s *trMock) IsRecovery() (f bool, err error) {
+	f = s.retIsRecovery[s.key][0].f
+	err = s.retIsRecovery[s.key][0].err
+	if len(s.retIsRecovery[s.key]) > 1 {
+		s.retIsRecovery[s.key] = s.retIsRecovery[s.key][1:]
+	}
+	return
 }
 
 type m struct {
@@ -39,15 +68,16 @@ func (s *m) Set(_ string, opts ...interface{}) error {
 	return nil
 }
 
-func (*m) Register(_ int, _, _ string, _ ...string) error { return nil }
-func (*m) Add(_ string, _ ...interface{}) error           { return nil }
-func (*m) Inc(_ string, _ ...interface{}) error           { return nil }
-func (*m) Dec(_ string, _ ...interface{}) error           { return nil }
+func (*m) Register(int, string, string, ...string) error { return nil }
+func (*m) Add(string, ...interface{}) error              { return nil }
+func (*m) Inc(string, ...interface{}) error              { return nil }
+func (*m) Dec(string, ...interface{}) error              { return nil }
 
 func TestMetric_Start(t *testing.T) {
 	type fields struct {
-		Config *config.Config
-		m      m
+		Config    *config.Config
+		transport *trMock
+		m         *m
 	}
 	tests := []struct {
 		name   string
@@ -57,9 +87,16 @@ func TestMetric_Start(t *testing.T) {
 		{
 			name: "test 1",
 			fields: fields{
-				m: m{r: make(map[string]float64)},
+				m: &m{r: make(map[string]float64)},
+				transport: &trMock{
+					retOpen: map[string][]error{"one": {nil}, "two": {nil}, "three": {nil}, "four": {errFoo}},
+					retIsRecovery: map[string][]struct {
+						f   bool
+						err error
+					}{"one": {{false, nil}}, "two": {{true, nil}}, "three": {{true, errFoo}}},
+				},
 				Config: &config.Config{
-					TimeoutHostStatus: 1,
+					HostStatusIntervalSec: 1,
 					Servers: map[string]*config.Server{
 						"one": {
 							PgConn: "one",
@@ -75,20 +112,34 @@ func TestMetric_Start(t *testing.T) {
 						},
 						"four": {
 							PgConn: "four",
+							Use:    true,
+						},
+						"five": {
+							PgConn: "five",
 							Use:    false,
 						},
 					},
 				},
 			},
-			want: map[string]float64{"one": 2, "three": 0, "two": 1},
+			want: map[string]float64{"one": 2, "three": 0, "two": 1, "four": 0},
+		},
+		{
+			name: "test 2",
+			fields: fields{
+				m: &m{r: make(map[string]float64)},
+				Config: &config.Config{
+					HostStatusIntervalSec: 0,
+				},
+			},
+			want: make(map[string]float64),
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			s := NewHostStatus(tt.fields.Config, &tt.fields.m, tr{})
+			s := NewHostStatus(tt.fields.Config, tt.fields.m, tt.fields.transport)
 			s.Start()
-			time.Sleep(time.Second)
-			if !assert.Equal(t, tt.fields.m.r, tt.want) {
+			time.Sleep(time.Millisecond * 10)
+			if !assert.Equal(t, tt.want, tt.fields.m.r) {
 				t.Errorf("TestMetric_Start() = %v, want %v", tt.fields.m.r, tt.want)
 			}
 		})

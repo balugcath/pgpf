@@ -20,9 +20,9 @@ var (
 
 const (
 	pgpfClientConnectionsMetricName = "pgpf_client_connections"
-	pgpfClientConnectionsMetricHelp = "pgpf_client_connections"
+	pgpfClientConnectionsMetricHelp = "how many client connected, partition by host"
 	pgpfTransferBytesMetricName     = "pgpf_transfer_bytes"
-	pgpfTransferBytesMetricHelp     = "pgpf_transfer_bytes"
+	pgpfTransferBytesMetricHelp     = "how many bytes transferred, partition by host"
 )
 
 // Proxy ...
@@ -31,6 +31,8 @@ type Proxy struct {
 	metric promwrap.Interface
 	net.Listener
 }
+
+var timeUnit = time.Second
 
 // NewProxy ...
 func NewProxy(config *config.Config, metric promwrap.Interface) *Proxy {
@@ -47,7 +49,6 @@ func NewProxy(config *config.Config, metric promwrap.Interface) *Proxy {
 func (s *Proxy) Listen(address string) (*Proxy, error) {
 	l, err := net.Listen("tcp", address)
 	if err != nil {
-		log.Debugf("listen error %s", err)
 		return nil, err
 	}
 	s.Listener = l
@@ -58,8 +59,8 @@ func (s *Proxy) Listen(address string) (*Proxy, error) {
 func (s *Proxy) Serve(doneCtx context.Context, hostname string) error {
 	var wg sync.WaitGroup
 	defer wg.Wait()
-	log.Debugf("proxy serve start for %s", hostname)
-	defer log.Debugf("proxy serve exit for %s", hostname)
+	log.Debugf("proxy.Serve() host %s start", hostname)
+	defer log.Debugf("proxy.Serve() host %s exit", hostname)
 
 	addressServer := s.Servers[hostname].Address
 
@@ -68,7 +69,7 @@ func (s *Proxy) Serve(doneCtx context.Context, hostname string) error {
 		defer wg.Done()
 		defer s.Listener.Close()
 		<-doneCtx.Done()
-		log.Debugln("done context received")
+		log.Debugf("proxy.Serve() host %s done context received", hostname)
 	}()
 
 	for {
@@ -78,7 +79,7 @@ func (s *Proxy) Serve(doneCtx context.Context, hostname string) error {
 			case <-doneCtx.Done():
 				return ErrTerminate
 			default:
-				log.Errorln(err)
+				log.Errorf("proxy.Serve() host %s %s", hostname, err)
 				continue
 			}
 		}
@@ -89,16 +90,16 @@ func (s *Proxy) Serve(doneCtx context.Context, hostname string) error {
 			var wgCopy sync.WaitGroup
 			defer wgCopy.Wait()
 
-			server, err := net.DialTimeout("tcp", addressServer, time.Second*time.Duration(s.Config.TimeoutMasterDial))
+			server, err := net.DialTimeout("tcp", addressServer, time.Duration(s.Config.TimeoutMasterDialSec)*timeUnit)
 			if err != nil {
-				log.Errorln(err)
+				log.Errorf("proxy.Serve() host %s %s", hostname, err)
 				client.Close()
 				return
 			}
 
-			log.Debugf("proxy start %s - %s : %s - %s", client.RemoteAddr().String(), client.LocalAddr().String(),
+			log.Debugf("proxy.Serve() start %s - %s : %s - %s", client.RemoteAddr().String(), client.LocalAddr().String(),
 				server.LocalAddr().String(), server.RemoteAddr().String())
-			defer log.Debugf("proxy stop %s - %s : %s - %s", client.RemoteAddr().String(), client.LocalAddr().String(),
+			defer log.Debugf("proxy.Serve() stop %s - %s : %s - %s", client.RemoteAddr().String(), client.LocalAddr().String(),
 				server.LocalAddr().String(), server.RemoteAddr().String())
 
 			s.metric.Inc(pgpfClientConnectionsMetricName, []interface{}{hostname}...)
@@ -113,19 +114,15 @@ func (s *Proxy) Serve(doneCtx context.Context, hostname string) error {
 			go func() {
 				defer wgCopy.Done()
 				defer cancel()
-				if _, err := s.copy(server, client, hostname, "read"); err != nil {
-					if err != io.EOF {
-						log.Errorln(err)
-					}
+				if _, err := s.copy(server, client, hostname, "read"); err != nil && err != io.EOF {
+					log.Errorf("proxy.Serve() host %s %s", hostname, err)
 				}
 			}()
 			go func() {
 				defer wgCopy.Done()
 				defer cancel()
-				if _, err := s.copy(client, server, hostname, "write"); err != nil {
-					if err != io.EOF {
-						log.Errorln(err)
-					}
+				if _, err := s.copy(client, server, hostname, "write"); err != nil && err != io.EOF {
+					log.Errorf("proxy.Serve() host %s %s", hostname, err)
 				}
 			}()
 
@@ -139,8 +136,8 @@ func (s *Proxy) Serve(doneCtx context.Context, hostname string) error {
 }
 
 func (s *Proxy) copy(dst io.Writer, src io.Reader, hostname, t string) (int, error) {
-	log.Debugf("copy start %s %s", hostname, t)
-	defer log.Debugf("copy exit %s %s", hostname, t)
+	log.Debugf("proxy.copy() host %s mode %s start", hostname, t)
+	defer log.Debugf("proxy.copy() host %s mode %s exit", hostname, t)
 	b := make([]byte, 65535)
 	total := 0
 	for {
@@ -156,6 +153,6 @@ func (s *Proxy) copy(dst io.Writer, src io.Reader, hostname, t string) (int, err
 			return total, err
 		}
 		s.metric.Add(pgpfTransferBytesMetricName, []interface{}{hostname, t, float64(n)}...)
-		log.Debugf("copy %s %s %d", hostname, t, n)
+		log.Debugf("proxy.copy() host %s mode %s %d bytes", hostname, t, n)
 	}
 }

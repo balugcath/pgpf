@@ -21,19 +21,20 @@ var (
 	ErrCheckHostFail = errors.New("check host failed")
 	// ErrTerminate ...
 	ErrTerminate = errors.New("terminate")
-	// ErrNoMasterFound ...
-	ErrNoMasterFound = errors.New("no master found")
-	// ErrNoStandbyFound ...
-	ErrNoStandbyFound = errors.New("no standby found")
+	// ErrServerNotFound ...
+	ErrServerNotFound = errors.New("server not found")
 )
 
 type transporter interface {
-	HostStatus(string) (bool, float64, error)
-	IsRecovery() (bool, error)
-	Close()
 	Open(string) error
-	Promote(string) error
+	Close()
+	HostVersion() (float64, error)
+	IsRecovery() (bool, error)
+	Promote() error
+	ChangePrimaryConn(string, string, string) error
 }
+
+var timeUnit = time.Second
 
 // Failover ...
 type Failover struct {
@@ -53,18 +54,9 @@ func NewFailover(cfg *config.Config, transporter transporter, metric promwrap.In
 }
 
 // Start ...
-func (s *Failover) Start(doneCtx context.Context) *Failover {
-	go func() {
-		log.Fatalln(s.start(doneCtx))
-	}()
-	return s
-}
-
-func (s *Failover) start(doneCtx context.Context) error {
+func (s *Failover) Start(doneCtx context.Context) error {
 	var wg sync.WaitGroup
 	defer wg.Wait()
-	log.Debugln("failover start")
-	defer log.Debugln("failover exit")
 
 	for {
 		s.Config.Lock()
@@ -72,36 +64,36 @@ func (s *Failover) start(doneCtx context.Context) error {
 		terminateCtx, cancel := context.WithCancel(context.Background())
 		defer cancel()
 
-		masterName, err := s.makeMaster()
+		masterName, err := s.findServer(false)
 		if err != nil {
-			return err
+			masterName, err = s.makeMaster()
+			if err != nil {
+				return err
+			}
 		}
-		log.Infof("use master %s", masterName)
 
 		masterProxy, err := proxy.NewProxy(s.Config, s.metric).Listen(s.Config.Listen)
 		if err != nil {
 			return err
 		}
 
-		if s.Config.ShardListen == "" {
-			log.Debugln("shard port not set, skiping shard server")
-		}
 		for s.Config.ShardListen != "" {
-			standbyName, err := s.findStandby()
+			standbyName, err := s.findServer(true)
 			if err != nil {
-				log.Errorln(err)
+				log.Errorf("failover.Start() %s", err)
 				break
 			}
 			shardProxy, err := proxy.NewProxy(s.Config, s.metric).Listen(s.Config.ShardListen)
 			if err != nil {
-				log.Errorln(err)
+				log.Errorf("failover.Start() %s", err)
 				break
 			}
-			log.Infof("use standby %s", standbyName)
+
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
-				log.Errorf("standby proxy %s exit %s", standbyName, shardProxy.Serve(terminateCtx, standbyName))
+				log.Debugf("failover.Start() host %s use as standby", standbyName)
+				log.Errorf("failover.Start() host %s %s", standbyName, shardProxy.Serve(terminateCtx, standbyName))
 			}()
 			break
 		}
@@ -110,13 +102,14 @@ func (s *Failover) start(doneCtx context.Context) error {
 		go func() {
 			defer wg.Done()
 			defer cancel()
-			log.Errorf("check master %s exit %s", masterName, s.checkMaster(terminateCtx, s.Config.Servers[masterName].PgConn))
+			log.Errorf("failover.Start() host %s %s", masterName, s.checkMaster(terminateCtx, s.Config.Servers[masterName].PgConn))
 		}()
 
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			log.Errorf("proxy %s exit %s", masterName, masterProxy.Serve(terminateCtx, masterName))
+			log.Debugf("failover.Start() host %s use as master", masterName)
+			log.Errorf("failover.Start() host %s %s", masterName, masterProxy.Serve(terminateCtx, masterName))
 		}()
 
 		s.Config.Unlock()
@@ -127,102 +120,121 @@ func (s *Failover) start(doneCtx context.Context) error {
 		case <-terminateCtx.Done():
 			wg.Wait()
 			s.Config.Servers[masterName].Use = false
-			log.Infof("set master server %s as dead", masterName)
 			s.Config.Save()
 		}
 	}
 }
 
 func (s *Failover) makeMaster() (string, error) {
+	log.Debugln("failover.makeMaster() start")
+
 	for k, v := range s.Config.Servers {
-		log.Debugf("check server %s", k)
 		if !v.Use {
-			log.Debugf("skip %s server", k)
+			log.Debugf("failover.makeMaster() host %s skip", k)
 			continue
 		}
-		isRecovery, _, err := s.transporter.HostStatus(v.PgConn)
+		if err := s.transporter.Open(v.PgConn); err != nil {
+			log.Errorf("failover.makeMaster() %s", err)
+			continue
+		}
+		isRecovery, err := s.transporter.IsRecovery()
 		if err != nil {
-			log.Errorln(err)
+			log.Errorf("failover.makeMaster() %s", err)
+			s.transporter.Close()
 			continue
 		}
 		if !isRecovery {
-			return k, nil
-		}
-		log.Debugf("server %s in recovery mode", k)
-	}
-
-	log.Debugln("no master server found, try search standby server")
-
-	for k, v := range s.Config.Servers {
-		log.Debugf("check server %s", k)
-		if !v.Use {
-			log.Debugf("skip %s server", k)
+			s.transporter.Close()
 			continue
 		}
-		isRecovery, ver, err := s.transporter.HostStatus(v.PgConn)
+		ver, err := s.transporter.HostVersion()
 		if err != nil {
-			log.Errorln(err)
+			log.Errorf("failover.makeMaster() %s", err)
+			s.transporter.Close()
 			continue
 		}
-		if !isRecovery {
-			log.Debugf("server %s is not in recovery mode", k)
-			continue
-		}
-
-		log.Debugf("found server %s version %+v", k, ver)
+		log.Debugf("failover.makeMaster() host %s try promote", k)
 		if ver >= s.Config.MinVerSQLPromote {
-			err = s.transporter.Promote(v.PgConn)
+			err = s.transporter.Promote()
 		} else {
 			err = execCommand(v.Command)
 		}
 		if err != nil {
-			log.Errorf("promote error %s, skiping %s", err, k)
+			log.Errorf("failover.makeMaster() %s", err)
+			s.transporter.Close()
 			continue
 		}
-		for y := 0; y <= s.Config.TimeoutWaitPromote; y++ {
+		for y := 0; y <= s.Config.TimeoutWaitPromoteSec; y++ {
 			time.Sleep(time.Second)
-			log.Infof("waiting for promote %s %d", k, y+1)
-			isRecovery, _, err := s.transporter.HostStatus(v.PgConn)
+			isRecovery, err := s.transporter.IsRecovery()
 			if err != nil {
-				log.Errorf("promote error %s, skiping %s", err, k)
+				log.Errorf("failover.makeMaster() %s", err)
+				s.transporter.Close()
 				break
 			}
 			if !isRecovery {
 				go func() {
-					for _, cmd := range s.makePostPromoteCmds(k, v.Host, v.Port) {
-						log.Debugf("exec post promote command %s", cmd)
-						if err := execCommand(cmd); err != nil {
-							log.Errorln(err)
-							continue
-						}
-					}
+					// check on 13 ver
+					// if ver >= s.Config.MinVerSQLPromote {
+					// s.makePostPromoteExec(k, v.Host, v.Port)
+					// } else {
+					// s.makePostPromoteCmd(k, v.Host, v.Port)
+					// }
+					s.makePostPromoteCmd(k, v.Host, v.Port)
 				}()
+				log.Debugf("failover.makeMaster() host %s promoted", k)
 				return k, nil
 			}
 		}
 	}
-	return "", ErrNoMasterFound
+	return "", ErrServerNotFound
 }
 
-func (s *Failover) findStandby() (string, error) {
+func (s *Failover) findServer(isRecovery bool) (string, error) {
+	log.Debugf("failover.findServer() recovery %+v start", isRecovery)
+
 	for k, v := range s.Config.Servers {
 		if !v.Use {
 			continue
 		}
-		isRecovery, _, err := s.transporter.HostStatus(v.PgConn)
-		if err != nil {
-			log.Errorln(err)
+		if err := s.transporter.Open(v.PgConn); err != nil {
+			log.Errorf("failover.findServer() %s", err)
 			continue
 		}
-		if isRecovery {
+		ret, err := s.transporter.IsRecovery()
+		s.transporter.Close()
+		if err != nil {
+			log.Errorf("failover.findServer() %s", err)
+			continue
+		}
+		if ret == isRecovery {
+			log.Debugf("failover.findServer() found host %s recovery %+v", k, isRecovery)
 			return k, nil
 		}
 	}
-	return "", ErrNoStandbyFound
+	log.Debugf("failover.findServer() recovery %+v %s", isRecovery, ErrServerNotFound)
+	return "", ErrServerNotFound
 }
 
-func (s *Failover) makePostPromoteCmds(newMaster, host, port string) []string {
-	out := make([]string, 0)
+func (s *Failover) makePostPromoteExec(newMaster, host, port string) (ret []string) {
+	for k, v := range s.Config.Servers {
+		if !v.Use || k == newMaster {
+			continue
+		}
+		if err := s.transporter.Open(v.PgConn); err != nil {
+			log.Errorf("failover.makePostPromoteExec() %s", err)
+			continue
+		}
+		if err := s.transporter.ChangePrimaryConn(v.Host, s.Config.PgUser, v.Port); err != nil {
+			log.Errorf("failover.makePostPromoteExec() %s", err)
+		}
+		s.transporter.Close()
+		ret = append(ret, k)
+	}
+	return ret
+}
+
+func (s *Failover) makePostPromoteCmd(newMaster, host, port string) (ret []string) {
 	for k, v := range s.Config.Servers {
 		if !v.Use || k == newMaster || v.PostPromoteCommand == "" {
 			continue
@@ -230,7 +242,7 @@ func (s *Failover) makePostPromoteCmds(newMaster, host, port string) []string {
 
 		t, err := template.New("t").Parse(v.PostPromoteCommand)
 		if err != nil {
-			log.Errorf("error parse template %s %s", v.PostPromoteCommand, err)
+			log.Errorf("failover.makePostPromoteCmd() %s %s", v.PostPromoteCommand, err)
 			continue
 		}
 
@@ -245,36 +257,44 @@ func (s *Failover) makePostPromoteCmds(newMaster, host, port string) []string {
 				port,
 				s.Config.PgUser,
 			}); err != nil {
-			log.Errorf("error execute template %s %s", v.PostPromoteCommand, err)
+			log.Errorf("failover.makePostPromoteCmd() %s %s", v.PostPromoteCommand, err)
 			continue
 		}
-		out = append(out, str.String())
+
+		ret = append(ret, str.String())
+
+		if err := execCommand(str.String()); err != nil {
+			log.Errorf("failover.makePostPromoteCmd() %s %s", str.String(), err)
+		}
 	}
-	return out
+	return ret
 }
 
 func (s *Failover) checkMaster(doneCtx context.Context, pgConn string) error {
+	log.Debugf("failover.checkMaster() start")
+	defer log.Debugf("failover.checkMaster() exit")
+
 	if err := s.transporter.Open(pgConn); err != nil {
 		return err
 	}
 	defer s.transporter.Close()
 
-	failureCount := 0
+	leftTime := time.Duration(s.Config.FailoverTimeoutSec) * timeUnit
 	for {
 		_, err := s.transporter.IsRecovery()
 		if err != nil {
-			failureCount++
+			leftTime -= time.Duration(s.Config.CheckMasterIntervalSec) * timeUnit
+			log.Errorf("failover.checkMaster() %s", err)
 		} else {
-			failureCount = 0
+			leftTime = time.Duration(s.Config.FailoverTimeoutSec) * timeUnit
 		}
 
 		select {
 		case <-doneCtx.Done():
 			return ErrTerminate
-		case <-time.After(time.Second * time.Duration(s.Config.TimeoutCheckMaster)):
-			if failureCount > s.Config.FailoverTimeout {
-				return ErrCheckHostFail
-			}
+		case <-time.After(leftTime):
+			return ErrCheckHostFail
+		case <-time.After(time.Duration(s.Config.CheckMasterIntervalSec) * timeUnit):
 		}
 	}
 }
@@ -283,7 +303,7 @@ func execCommand(cmd string) error {
 	c := strings.Split(cmd, " ")
 	out, err := exec.Command(c[0], c[1:]...).CombinedOutput()
 	if err != nil {
-		return fmt.Errorf("%w %s", err, string(out))
+		return fmt.Errorf("failover.execCommand() %s %s", string(out), err)
 	}
 	return nil
 }

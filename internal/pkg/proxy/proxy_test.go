@@ -148,7 +148,7 @@ func TestProxy_Proxy1(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		terminateCtx.Done()
+		cancel()
 
 		if string(reply) != data+"\n" {
 			t.Errorf("TestProxy_Proxy1 got %+v, want %+v", string(reply), data+"\n")
@@ -188,7 +188,7 @@ func TestProxy_Proxy2(t *testing.T) {
 		}
 		cli.Close()
 		runtime.Gosched()
-		terminateCtx.Done()
+		cancel()
 	})
 }
 
@@ -207,7 +207,7 @@ func TestProxy_Proxy3(t *testing.T) {
 				},
 			}}, m{}).Listen(ts.Listener.Addr().String())
 		if err == nil {
-			t.Errorf("want not nill error")
+			t.Errorf("want not nil error")
 		}
 	})
 }
