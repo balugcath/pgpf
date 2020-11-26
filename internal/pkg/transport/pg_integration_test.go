@@ -1,4 +1,4 @@
-// +built integration_test
+// +build integration_test
 // see ../../../build/.drone.yml
 
 package transport
