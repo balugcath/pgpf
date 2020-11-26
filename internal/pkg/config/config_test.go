@@ -460,6 +460,27 @@ func TestNewConfig(t *testing.T) {
 				},
 			},
 		},
+		{
+			name: "test 2",
+			args: args{
+				configFile: "n/a",
+			},
+			wantErr: true,
+		},
+		{
+			name: "test 3",
+			args: args{
+				configFile: "../../../configs/pgpf_bad1.yml",
+			},
+			wantErr: true,
+		},
+		{
+			name: "test 4",
+			args: args{
+				configFile: "../../../configs/pgpf_bad2.yml",
+			},
+			wantErr: true,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -468,7 +489,7 @@ func TestNewConfig(t *testing.T) {
 				t.Errorf("NewConfig() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
-			if !assert.Equal(t, tt.want, got) {
+			if !tt.wantErr && !assert.Equal(t, tt.want, got) {
 				t.Errorf("NewConfig() = %v, want %v", got, tt.want)
 			}
 		})

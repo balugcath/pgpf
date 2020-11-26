@@ -65,7 +65,7 @@ var config = Config{
 
 // NewConfig ...
 func NewConfig(configFile, etcdAddress, etcdKey string) (*Config, error) {
-	s := &config
+	s := config
 	s.configFile = configFile
 	s.etcdAddress = etcdAddress
 	s.etcdKey = etcdKey
@@ -79,7 +79,7 @@ func NewConfig(configFile, etcdAddress, etcdKey string) (*Config, error) {
 	if err := s.prepeareConfig(pgConnTemplate); err != nil {
 		return nil, err
 	}
-	return s, nil
+	return &s, nil
 }
 
 func (s *Config) checkConfig() error {

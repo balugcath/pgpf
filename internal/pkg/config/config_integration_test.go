@@ -1,4 +1,4 @@
-// +build integration_test
+// +built integration_test
 // see ../../../build/.drone.yml
 
 package config
