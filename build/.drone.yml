@@ -5,9 +5,9 @@ steps:
   - name: build
     image: golang:alpine
     environment:
-      CGO_ENABLED: 0
-      GO111MODULE: on
-      ETCDCTL_API: 3
+      CGO_ENABLED: "0"
+      GO111MODULE: "on"
+      ETCDCTL_API: "3"
       COVERALLS_TOKEN:
         from_secret: coveralls_token
     commands:
@@ -16,18 +16,8 @@ steps:
       - go build ./cmd/pgpf/...
       - etcdctl --endpoints http://etcd_service:2379 put pgpf < configs/pgpf.yml
       - go test -tags integration_test -covermode=count -coverprofile=coverage.out ./...
-
-  #      - go get github.com/mattn/goveralls
-  #      - goveralls -tags integration_test -service drone.io
-  #    - go test -tags integration_test -short -coverprofile coverage.txt ./...
-
-  - name: publish coveralls
-    image: lizheming/drone-coveralls
-    settings:
-      token:
-        from_secret: coveralls_token
-      files:
-        - ./coverage.out
+      - go get github.com/mattn/goveralls
+      - goveralls -coverprofile=coverage.out -service drone.io
 
   #- name: publish coverage
   #  image: plugins/codecov
@@ -89,7 +79,7 @@ services:
   - name: postgres_service
     image: postgres:latest
     environment:
-      POSTGRES_PASSWORD: 123
+      POSTGRES_PASSWORD: "123"
     commands:
       - ls -al /drone/src/
       - ls -al /docker-entrypoint-initdb.d/
@@ -98,4 +88,4 @@ services:
   - name: etcd_service
     image: appcelerator/etcd:latest
     environment:
-      MIN_SEEDS_COUNT: 0
+      MIN_SEEDS_COUNT: "0"
