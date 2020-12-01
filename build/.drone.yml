@@ -8,20 +8,34 @@ steps:
     CGO_ENABLED: 0
     GO111MODULE: on
     ETCDCTL_API: 3
+    COVERALLS_TOKEN:
+      from_secret: coveralls_token
   commands:
     - apk add --no-cache git curl
     - apk add etcd-ctl --repository=http://dl-cdn.alpinelinux.org/alpine/edge/testing/
     - go build ./cmd/pgpf/...
     - etcdctl --endpoints http://etcd_service:2379 put pgpf < configs/pgpf.yml
-    - go test -tags integration_test -short -coverprofile coverage.txt ./...
+	- go get github.com/mattn/goveralls
+	- goveralls -tags integration_test -service drone.io	
+	
+#	- go test -tags integration_test -covermode=count -coverprofile=coverage.out $HOME/gopath/bin/goveralls -coverprofile=coverage.out -service=travis-ci -repotoken $COVERALLS_TOKEN
+#    - go test -tags integration_test -short -coverprofile coverage.txt ./...
+    
+#- name: publish coveralls
+#  image: lizheming/drone-coveralls
+#  settings:
+#    token:
+#      from_secret: coveralls_token
+#    files:
+#    - ./coverage.out
 
-- name: publish coverage
-  image: plugins/codecov
-  settings:
-    token:
-      from_secret: codecov_token
-    files:
-    - coverage.txt
+#- name: publish coverage
+#  image: plugins/codecov
+#  settings:
+#    token:
+#      from_secret: codecov_token
+#    files:
+#    - coverage.txt
 
 - name: publish latest docker
   image: plugins/docker
