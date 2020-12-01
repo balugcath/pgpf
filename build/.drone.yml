@@ -2,100 +2,100 @@ kind: pipeline
 name: default
 
 steps:
-- name: build
-  image: golang:alpine
-  environment:
-    CGO_ENABLED: 0
-    GO111MODULE: on
-    ETCDCTL_API: 3
-    COVERALLS_TOKEN:
-      from_secret: coveralls_token
-  commands:
-    - apk add --no-cache git curl
-    - apk add etcd-ctl --repository=http://dl-cdn.alpinelinux.org/alpine/edge/testing/
-    - go build ./cmd/pgpf/...
-    - etcdctl --endpoints http://etcd_service:2379 put pgpf < configs/pgpf.yml
-    - go get github.com/mattn/goveralls
-    - goveralls -tags integration_test -service drone.io	
-	
-#	- go test -tags integration_test -covermode=count -coverprofile=coverage.out $HOME/gopath/bin/goveralls -coverprofile=coverage.out -service=travis-ci -repotoken $COVERALLS_TOKEN
-#    - go test -tags integration_test -short -coverprofile coverage.txt ./...
-    
-#- name: publish coveralls
-#  image: lizheming/drone-coveralls
-#  settings:
-#    token:
-#      from_secret: coveralls_token
-#    files:
-#    - ./coverage.out
+  - name: build
+    image: golang:alpine
+    environment:
+      CGO_ENABLED: 0
+      GO111MODULE: on
+      ETCDCTL_API: 3
+      COVERALLS_TOKEN:
+        from_secret: coveralls_token
+    commands:
+      - apk add --no-cache git curl
+      - apk add etcd-ctl --repository=http://dl-cdn.alpinelinux.org/alpine/edge/testing/
+      - go build ./cmd/pgpf/...
+      - etcdctl --endpoints http://etcd_service:2379 put pgpf < configs/pgpf.yml
+      - go get github.com/mattn/goveralls
+      - goveralls -tags integration_test -service drone.io
 
-#- name: publish coverage
-#  image: plugins/codecov
-#  settings:
-#    token:
-#      from_secret: codecov_token
-#    files:
-#    - coverage.txt
+  #	- go test -tags integration_test -covermode=count -coverprofile=coverage.out $HOME/gopath/bin/goveralls -coverprofile=coverage.out -service=travis-ci -repotoken $COVERALLS_TOKEN
+  #    - go test -tags integration_test -short -coverprofile coverage.txt ./...
 
-- name: publish latest docker
-  image: plugins/docker
-  settings:
-    repo: balugcath/pgpf
-    tag: latest
-    username: balugcath
-    password:
-      from_secret: dockerhub_token
-    dockerfile: build/Dockerfile
-  when:
-    branch:
-    - master
-    event:
-    - push
-    - tag
+  #- name: publish coveralls
+  #  image: lizheming/drone-coveralls
+  #  settings:
+  #    token:
+  #      from_secret: coveralls_token
+  #    files:
+  #    - ./coverage.out
 
-- name: publish release docker
-  image: plugins/docker
-  settings:
-    repo: balugcath/pgpf
-    auto_tag: true
-    auto_tag_suffix: linux-amd64
-    username: balugcath
-    password:
-      from_secret: dockerhub_token
-    dockerfile: build/Dockerfile
-  when:
-    branch:
-    - master
-    event:
-    - tag
+  #- name: publish coverage
+  #  image: plugins/codecov
+  #  settings:
+  #    token:
+  #      from_secret: codecov_token
+  #    files:
+  #    - coverage.txt
 
-- name: publish binary release
-  image: plugins/github-release
-  settings:
-    api_key:
-      from_secret: github_token
-    files:
-      - pgpf
-    checksum:
-      - md5
-      - sha512
-  when:
-    branch:
-    - master
-    event:
-    - tag
+  - name: publish latest docker
+    image: plugins/docker
+    settings:
+      repo: balugcath/pgpf
+      tag: latest
+      username: balugcath
+      password:
+        from_secret: dockerhub_token
+      dockerfile: build/Dockerfile
+    when:
+      branch:
+        - master
+      event:
+        - push
+        - tag
+
+  - name: publish release docker
+    image: plugins/docker
+    settings:
+      repo: balugcath/pgpf
+      auto_tag: true
+      auto_tag_suffix: linux-amd64
+      username: balugcath
+      password:
+        from_secret: dockerhub_token
+      dockerfile: build/Dockerfile
+    when:
+      branch:
+        - master
+      event:
+        - tag
+
+  - name: publish binary release
+    image: plugins/github-release
+    settings:
+      api_key:
+        from_secret: github_token
+      files:
+        - pgpf
+      checksum:
+        - md5
+        - sha512
+    when:
+      branch:
+        - master
+      event:
+        - tag
 
 services:
-- name: postgres_service
-  image: postgres:latest
-  environment:
-    POSTGRES_PASSWORD: 123
-  commands:
-  - ls -al /drone/src/
-  - ls -al /docker-entrypoint-initdb.d/
-  - docker-entrypoint.sh postgres
+  - name: postgres_service
+    image: postgres:latest
+    environment:
+      POSTGRES_PASSWORD: 123
+    commands:
+      - ls -al /drone/src/
+      - ls -al /docker-entrypoint-initdb.d/
+      - docker-entrypoint.sh postgres
 
-- name: etcd_service
-  image: appcelerator/etcd:latest
-  environment:
-    MIN_SEEDS_COUNT: 0
+  - name: etcd_service
+    image: appcelerator/etcd:latest
+    environment:
+      MIN_SEEDS_COUNT: 0
