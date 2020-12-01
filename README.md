@@ -3,8 +3,9 @@
 pgpf is a simple failover and proxy middleware that works between PostgreSQL servers and a PostgreSQL database client
 
 [![Go Report Card](https://goreportcard.com/badge/github.com/balugcath/pgpf?style=flat-square)](https://goreportcard.com/report/github.com/balugcath/pgpf)
-[![codecov](https://codecov.io/gh/balugcath/pgpf/branch/master/graph/badge.svg)](https://codecov.io/gh/balugcath/pgpf)
+[![Coverage Status](https://coveralls.io/repos/github/balugcath/pgpf/badge.svg?branch=master)](https://coveralls.io/github/balugcath/pgpf?branch=master)
 ![GitHub go.mod Go version](https://img.shields.io/github/go-mod/go-version/balugcath/pgpf)
+[![Build Status](http://80.79.179.5:8093/api/badges/balugcath/pgpf/status.svg)](http://80.79.179.5:8093/balugcath/pgpf)
 
 ## Table of contents
 
@@ -34,8 +35,6 @@ get docker image
 ```sh
 $ docker pull balugcath/pgpf
 ```
-
-get binary release from github
 
 ## Start
 
