@@ -15,7 +15,7 @@ steps:
       - apk add etcd-ctl --repository=http://dl-cdn.alpinelinux.org/alpine/edge/testing/
       - go build ./cmd/pgpf/...
       - etcdctl --endpoints http://etcd_service:2379 put pgpf < configs/pgpf.yml
-      - go test -tags integration_test -covermode=count -coverprofile=coverage.out
+      - go test -tags integration_test -covermode=count -coverprofile=coverage.out ./...
 
   #      - go get github.com/mattn/goveralls
   #      - goveralls -tags integration_test -service drone.io
